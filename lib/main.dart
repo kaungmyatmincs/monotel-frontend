@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'services/api_service.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter/foundation.dart';
 
 void main() {
   runApp(const MonotelApp());
@@ -486,9 +488,12 @@ class _TenantsPageState extends State<TenantsPage> {
                         ),
                         const SizedBox(height: 12),
                         _billRow("Rent", bill["rent"]),
-                        _billRow("Water", bill["water"]),
-                        _billRow("Electricity",
-                            bill["electricity"]),
+                        _billRow("Water", (bill["water_curr"] != null && bill["water_curr"] != 0)
+                            ? "${bill["water"]} (${(num.parse(bill["water_curr"].toString()) - num.parse(bill["water_prev"].toString())).toInt()} units)"
+                            : "${bill["water"]}"),
+                        _billRow("Electricity", (bill["elec_curr"] != null && bill["elec_curr"] != 0)
+                            ? "${bill["electricity"]} (${(num.parse(bill["elec_curr"].toString()) - num.parse(bill["elec_prev"].toString())).toInt()} units)"
+                            : "${bill["electricity"]}"),
                         const Divider(height: 24),
                         _billRow("Total", bill["total"],
                             isBold: true),
@@ -580,7 +585,6 @@ class _TenantsPageState extends State<TenantsPage> {
       ),
     );
   }
-
 }
 
 class MeterInputPage extends StatefulWidget {
@@ -600,7 +604,9 @@ class _MeterInputPageState extends State<MeterInputPage> {
   final waterCurrController = TextEditingController();
 
   bool loading = false;
+  bool scanning = false;
   String message = "";
+  List<Map<String, dynamic>> scannedRows = [];
 
   @override
   void initState() {
@@ -610,27 +616,88 @@ class _MeterInputPageState extends State<MeterInputPage> {
         "${now.year}-${now.month.toString().padLeft(2, '0')}";
   }
 
-  void _submit() async {
+  void _scanSheet() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 100);
+    if (picked == null) return;
+
+    setState(() {
+      scanning = true;
+      message = "";
+      scannedRows = [];
+    });
+
+    try {
+      final bytes = await picked.readAsBytes();
+      final result = await ApiService.scanMeterSheet(
+          widget.token, bytes, picked.name);
+
+      final parsed = result["parsed"] as List<dynamic>;
+
+      setState(() {
+        scannedRows = parsed.map((e) => Map<String, dynamic>.from(e)).toList();
+        if (scannedRows.isNotEmpty) {
+          final first = scannedRows[0];
+          roomController.text = first["room_number"] ?? "";
+          monthController.text = first["month"] ?? monthController.text;
+          elecPrevController.text = first["elec_prev"]?.toString() ?? "";
+          elecCurrController.text = first["elec_curr"]?.toString() ?? "";
+          waterPrevController.text = first["water_prev"]?.toString() ?? "";
+          waterCurrController.text = first["water_curr"]?.toString() ?? "";
+          message = "✅ Scanned ${scannedRows.length} row(s). Review and confirm.";
+        }
+      });
+    } catch (e) {
+      setState(() {
+        message = "❌ Scan failed: ${e.toString()}";
+      });
+    } finally {
+      setState(() => scanning = false);
+    }
+  }
+
+  void _submitAll() async {
     setState(() {
       loading = true;
       message = "";
     });
 
     try {
-      final result = await ApiService.createBillFromMeters(
-        widget.token,
-        roomController.text.trim(),
-        monthController.text.trim(),
-        double.parse(elecPrevController.text.trim()),
-        double.parse(elecCurrController.text.trim()),
-        double.parse(waterPrevController.text.trim()),
-        double.parse(waterCurrController.text.trim()),
-      );
-
-      setState(() {
-        message =
-            "✅ Bill created! Total: ${result["amount"]} (Elec: ${result["electricity"]}, Water: ${result["water"]}, Rent: ${result["rent"]})";
-      });
+      if (scannedRows.isNotEmpty) {
+        // Submit all scanned rows
+        int created = 0;
+        for (final row in scannedRows) {
+          await ApiService.createBillFromMeters(
+            widget.token,
+            row["room_number"],
+            row["month"],
+            (row["elec_prev"] as num).toDouble(),
+            (row["elec_curr"] as num).toDouble(),
+            (row["water_prev"] as num).toDouble(),
+            (row["water_curr"] as num).toDouble(),
+          );
+          created++;
+        }
+        setState(() {
+          message = "✅ Created $created bills successfully!";
+          scannedRows = [];
+        });
+      } else {
+        // Manual single submit
+        final result = await ApiService.createBillFromMeters(
+          widget.token,
+          roomController.text.trim(),
+          monthController.text.trim(),
+          double.parse(elecPrevController.text.trim()),
+          double.parse(elecCurrController.text.trim()),
+          double.parse(waterPrevController.text.trim()),
+          double.parse(waterCurrController.text.trim()),
+        );
+        setState(() {
+          message =
+              "✅ Bill created! Total: ${result["amount"]} (Elec: ${result["electricity"]}, Water: ${result["water"]}, Rent: ${result["rent"]})";
+        });
+      }
     } catch (e) {
       setState(() {
         message = "❌ ${e.toString().replaceAll('Exception: ', '')}";
@@ -640,13 +707,11 @@ class _MeterInputPageState extends State<MeterInputPage> {
     }
   }
 
-  Widget _field(String label, TextEditingController controller,
-      {bool readOnly = false}) {
+  Widget _field(String label, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: controller,
-        readOnly: readOnly,
         keyboardType: TextInputType.number,
         decoration: InputDecoration(
           labelText: label,
@@ -667,21 +732,43 @@ class _MeterInputPageState extends State<MeterInputPage> {
             const Text("Enter Meter Readings",
                 style:
                     TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: scanning ? null : _scanSheet,
+              icon: const Icon(Icons.document_scanner),
+              label: scanning
+                  ? const Text("Scanning...")
+                  : const Text("Scan Sheet (OCR)"),
+            ),
             const SizedBox(height: 24),
-            _field("Room Number", roomController),
-            _field("Month (YYYY-MM)", monthController),
-            const Divider(),
-            const Text("⚡ Electricity",
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            _field("Previous Reading", elecPrevController),
-            _field("Current Reading", elecCurrController),
-            const Divider(),
-            const Text("💧 Water",
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            _field("Previous Reading", waterPrevController),
-            _field("Current Reading", waterCurrController),
+            if (scannedRows.length > 1) ...[
+              Text("${scannedRows.length} rooms scanned:",
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...scannedRows.map((row) => Card(
+                    child: ListTile(
+                      title: Text("Room ${row["room_number"]}"),
+                      subtitle: Text(
+                          "Elec: ${row["elec_prev"]}→${row["elec_curr"]}  Water: ${row["water_prev"]}→${row["water_curr"]}"),
+                    ),
+                  )),
+              const SizedBox(height: 16),
+            ] else ...[
+              _field("Room Number", roomController),
+              _field("Month (YYYY-MM)", monthController),
+              const Divider(),
+              const Text("⚡ Electricity",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              _field("Previous Reading", elecPrevController),
+              _field("Current Reading", elecCurrController),
+              const Divider(),
+              const Text("💧 Water",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              _field("Previous Reading", waterPrevController),
+              _field("Current Reading", waterCurrController),
+            ],
             const SizedBox(height: 8),
             if (message.isNotEmpty)
               Text(message,
@@ -693,10 +780,12 @@ class _MeterInputPageState extends State<MeterInputPage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: loading ? null : _submit,
+                onPressed: loading ? null : _submitAll,
                 child: loading
                     ? const CircularProgressIndicator()
-                    : const Text("Create Bill"),
+                    : Text(scannedRows.isNotEmpty
+                        ? "Confirm & Create All Bills"
+                        : "Create Bill"),
               ),
             ),
           ],

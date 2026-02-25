@@ -192,5 +192,22 @@ class ApiService {
       throw Exception(error["error"] ?? "Failed to create bill");
     }
   }
+
+  static Future<Map<String, dynamic>> scanMeterSheet(String token, List<int> imageBytes, String filename) async {
+    final uri = Uri.parse("http://localhost:8000/ocr");
+    final request = http.MultipartRequest('POST', uri);
+    request.files.add(http.MultipartFile.fromBytes(
+      'file',
+      imageBytes,
+      filename: filename,
+    ));
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    if (response.statusCode == 200) {
+      return jsonDecode(body);
+    } else {
+      throw Exception("OCR failed");
+    }
+  }
 }
     
