@@ -157,6 +157,10 @@ class _AdminLayoutState extends State<AdminLayout> {
       return RoomsPage(token: widget.token);
     }
 
+    if (selectedIndex == 3) {
+      return TenantsPage(token: widget.token);
+    }
+
     return Center(
       child: Text(
         pages[selectedIndex],
@@ -322,5 +326,258 @@ class _RoomsPageState extends State<RoomsPage> {
     );
   }
 }
+
+class TenantsPage extends StatefulWidget {
+  final String token;
+
+  const TenantsPage({super.key, required this.token});
+
+  @override
+  State<TenantsPage> createState() => _TenantsPageState();
+}
+
+class _TenantsPageState extends State<TenantsPage> {
+  List<dynamic> allBills = [];
+  late Future<List<dynamic>> tenantsFuture;
+  Map<String, dynamic>? selectedTenant;
+  Map<String, dynamic>? currentBill;
+
+  @override
+  void initState() {
+    super.initState();
+    tenantsFuture = ApiService.getTenants(widget.token);
+  }
+
+  void _selectTenant(Map<String, dynamic> tenant) async {
+    final bills =
+        await ApiService.getAllBills(widget.token, tenant["id"]);
+
+    setState(() {
+      selectedTenant = tenant;
+      currentBill = bills.isNotEmpty ? bills.first : null;
+      allBills = bills;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          flex: 1,
+          child: FutureBuilder<List<dynamic>>(
+            future: tenantsFuture,
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final tenants = snapshot.data!;
+
+              return ListView.builder(
+                itemCount: tenants.length,
+                itemBuilder: (context, index) {
+                  final tenant = tenants[index];
+
+                  return ListTile(
+                    title: Text(tenant["name"]),
+                    subtitle:
+                        Text("Room ${tenant["room_number"] ?? ""}"),
+                    onTap: () => _selectTenant(tenant),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        const VerticalDivider(),
+        Expanded(
+          flex: 2,
+          child: selectedTenant == null
+              ? const Center(child: Text("Select a tenant"))
+              : _buildTenantDetail(),
+        )
+      ],
+    );
+  }
+
+  Widget _buildTenantDetail() {
+    if (selectedTenant == null) {
+      return const Center(child: Text("Select a tenant"));
+    }
+
+    if (allBills.isEmpty) {
+      return const Center(
+        child: Text(
+          "No bills found",
+          style: TextStyle(fontSize: 18),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            selectedTenant!["name"],
+            style: const TextStyle(
+                fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Room ${selectedTenant!["room_number"]}",
+            style: const TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          const SizedBox(height: 30),
+
+          const Text(
+            "Billing History",
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+
+          Expanded(
+            child: ListView.builder(
+              itemCount: allBills.length,
+              itemBuilder: (context, index) {
+                final bill = allBills[index];
+                final isPaid = bill["status"] == "paid";
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment:
+                              MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              bill["month"],
+                              style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isPaid
+                                    ? Colors.green
+                                    : Colors.red,
+                                borderRadius:
+                                    BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                isPaid ? "Paid" : "Unpaid",
+                                style: const TextStyle(
+                                    color: Colors.white),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _billRow("Rent", bill["rent"]),
+                        _billRow("Water", bill["water"]),
+                        _billRow("Electricity",
+                            bill["electricity"]),
+                        const Divider(height: 24),
+                        _billRow("Total", bill["total"],
+                            isBold: true),
+                        const SizedBox(height: 12),
+
+                        Row(
+                          children: [
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    isPaid ? Colors.orange : Colors.green,
+                              ),
+                              onPressed: () async {
+                                if (isPaid) {
+                                  await ApiService.markBillUnpaid(
+                                      widget.token, bill["id"]);
+                                } else {
+                                  await ApiService.markBillPaid(
+                                      widget.token, bill["id"]);
+                                }
+
+                                final updatedBills =
+                                    await ApiService.getAllBills(
+                                        widget.token,
+                                        selectedTenant!["id"]);
+
+                                setState(() {
+                                  allBills = updatedBills;
+                                });
+                              },
+                              child: Text(
+                                  isPaid ? "Mark as Unpaid" : "Mark as Paid"),
+                            ),
+                            const SizedBox(width: 12),
+                            OutlinedButton(
+                              onPressed: () async {
+                                try {
+                                  await ApiService.sendBillTelegram(
+                                    widget.token,
+                                    selectedTenant!["id"],
+                                    bill["month"],
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Bill sent via Telegram!")),
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text("Failed to send bill")),
+                                  );
+                                }
+                              },
+                              child: const Text("Send to Telegram"),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _billRow(String label, dynamic value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+          Text(
+            value.toString(),
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+}
+
 
 
