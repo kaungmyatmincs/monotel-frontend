@@ -161,6 +161,10 @@ class _AdminLayoutState extends State<AdminLayout> {
       return TenantsPage(token: widget.token);
     }
 
+    if (selectedIndex == 4) {
+      return MeterInputPage(token: widget.token);
+    }
+
     return Center(
       child: Text(
         pages[selectedIndex],
@@ -577,6 +581,129 @@ class _TenantsPageState extends State<TenantsPage> {
     );
   }
 
+}
+
+class MeterInputPage extends StatefulWidget {
+  final String token;
+  const MeterInputPage({super.key, required this.token});
+
+  @override
+  State<MeterInputPage> createState() => _MeterInputPageState();
+}
+
+class _MeterInputPageState extends State<MeterInputPage> {
+  final roomController = TextEditingController();
+  final monthController = TextEditingController();
+  final elecPrevController = TextEditingController();
+  final elecCurrController = TextEditingController();
+  final waterPrevController = TextEditingController();
+  final waterCurrController = TextEditingController();
+
+  bool loading = false;
+  String message = "";
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    monthController.text =
+        "${now.year}-${now.month.toString().padLeft(2, '0')}";
+  }
+
+  void _submit() async {
+    setState(() {
+      loading = true;
+      message = "";
+    });
+
+    try {
+      final result = await ApiService.createBillFromMeters(
+        widget.token,
+        roomController.text.trim(),
+        monthController.text.trim(),
+        double.parse(elecPrevController.text.trim()),
+        double.parse(elecCurrController.text.trim()),
+        double.parse(waterPrevController.text.trim()),
+        double.parse(waterCurrController.text.trim()),
+      );
+
+      setState(() {
+        message =
+            "✅ Bill created! Total: ${result["amount"]} (Elec: ${result["electricity"]}, Water: ${result["water"]}, Rent: ${result["rent"]})";
+      });
+    } catch (e) {
+      setState(() {
+        message = "❌ ${e.toString().replaceAll('Exception: ', '')}";
+      });
+    } finally {
+      setState(() => loading = false);
+    }
+  }
+
+  Widget _field(String label, TextEditingController controller,
+      {bool readOnly = false}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextField(
+        controller: controller,
+        readOnly: readOnly,
+        keyboardType: TextInputType.number,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("Enter Meter Readings",
+                style:
+                    TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+            _field("Room Number", roomController),
+            _field("Month (YYYY-MM)", monthController),
+            const Divider(),
+            const Text("⚡ Electricity",
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            _field("Previous Reading", elecPrevController),
+            _field("Current Reading", elecCurrController),
+            const Divider(),
+            const Text("💧 Water",
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            _field("Previous Reading", waterPrevController),
+            _field("Current Reading", waterCurrController),
+            const SizedBox(height: 8),
+            if (message.isNotEmpty)
+              Text(message,
+                  style: TextStyle(
+                      color: message.startsWith("✅")
+                          ? Colors.green
+                          : Colors.red)),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: loading ? null : _submit,
+                child: loading
+                    ? const CircularProgressIndicator()
+                    : const Text("Create Bill"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 

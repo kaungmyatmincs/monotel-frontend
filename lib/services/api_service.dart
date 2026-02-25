@@ -159,5 +159,38 @@ class ApiService {
       throw Exception("Failed to send bill");
     }
   }
+
+  static Future<Map<String, dynamic>> createBillFromMeters(
+    String token,
+    String roomNumber,
+    String month,
+    double elecPrev,
+    double elecCurr,
+    double waterPrev,
+    double waterCurr,
+  ) async {
+    final response = await http.post(
+      Uri.parse("$baseUrl/tenants/create-bill-from-meters"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+      body: jsonEncode({
+        "room_number": roomNumber,
+        "month": month,
+        "elec_prev": elecPrev,
+        "elec_curr": elecCurr,
+        "water_prev": waterPrev,
+        "water_curr": waterCurr,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      return jsonDecode(response.body);
+    } else {
+      final error = jsonDecode(response.body);
+      throw Exception(error["error"] ?? "Failed to create bill");
+    }
+  }
 }
     
