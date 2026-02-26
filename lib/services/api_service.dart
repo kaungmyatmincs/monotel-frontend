@@ -38,6 +38,23 @@ class ApiService {
     }
   }
 
+  static Future<void> createBuilding(String token, String name) async {
+    final response = await http.post(
+      Uri.parse("$baseUrl/buildings"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode({"name": name}),
+    );
+    if (response.statusCode != 201) throw Exception("Failed to create building");
+  }
+
+  static Future<void> deleteBuilding(String token, String buildingId) async {
+    final response = await http.delete(
+      Uri.parse("$baseUrl/buildings/$buildingId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    if (response.statusCode != 200) throw Exception("Failed to delete building");
+  }
+
   static Future<List<dynamic>> getRooms(String token) async {
     final response = await http.get(
         Uri.parse("$baseUrl/rooms"),
@@ -68,6 +85,31 @@ class ApiService {
     }
   }
 
+  static Future<void> createRoom(String token, String buildingId, String roomNumber, int floor, double monthlyRent) async {
+    final response = await http.post(
+      Uri.parse("$baseUrl/rooms"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode({"building_id": buildingId, "room_number": roomNumber, "floor": floor, "monthly_rent": monthlyRent}),
+    );
+    if (response.statusCode != 201) throw Exception("Failed to create room");
+  }
+
+  static Future<void> deleteRoom(String token, String roomId) async {
+    final response = await http.delete(
+      Uri.parse("$baseUrl/rooms/$roomId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    if (response.statusCode != 200) throw Exception("Failed to delete room");
+  }
+
+  static Future<void> updateRoom(String token, String roomId, Map<String, dynamic> data) async {
+    await http.put(
+      Uri.parse("$baseUrl/rooms/$roomId"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode(data),
+    );
+  }
+
   static Future<List<dynamic>> getTenants(String token) async {
     final response = await http.get(
         Uri.parse("$baseUrl/tenants"),
@@ -82,6 +124,37 @@ class ApiService {
     } else {
         throw Exception("Failed to load tenants");
     }
+  }
+
+  static Future<void> createTenant(String token, String name, String phone, String roomId) async {
+    await http.post(
+      Uri.parse("$baseUrl/tenants"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode({"name": name, "phone": phone, "room_id": roomId}),
+    );
+  }
+
+  static Future<void> updateTenant(String token, String tenantId, Map<String, dynamic> data) async {
+    await http.patch(
+      Uri.parse("$baseUrl/tenants/$tenantId"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode(data),
+    );
+  }
+
+  static Future<void> deactivateTenant(String token, String tenantId) async {
+    await http.delete(
+      Uri.parse("$baseUrl/tenants/$tenantId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+  }
+
+  static Future<void> setTelegramChatId(String token, String tenantId, String chatId) async {
+    await http.patch(
+      Uri.parse("$baseUrl/tenants/$tenantId/telegram-chat-id"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode({"telegram_chat_id": chatId}),
+    );
   }
 
   static Future<Map<String, dynamic>?> getCurrentBill(String token, String tenantId) async {
@@ -161,20 +234,12 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> createBillFromMeters(
-    String token,
-    String roomNumber,
-    String month,
-    double elecPrev,
-    double elecCurr,
-    double waterPrev,
-    double waterCurr,
-  ) async {
+      String token, String roomNumber, String month,
+      double elecPrev, double elecCurr, double waterPrev, double waterCurr,
+      [double elecRate = 400, double waterRate = 15]) async {
     final response = await http.post(
       Uri.parse("$baseUrl/tenants/create-bill-from-meters"),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
       body: jsonEncode({
         "room_number": roomNumber,
         "month": month,
@@ -182,15 +247,14 @@ class ApiService {
         "elec_curr": elecCurr,
         "water_prev": waterPrev,
         "water_curr": waterCurr,
+        "elec_rate": elecRate,
+        "water_rate": waterRate,
       }),
     );
-
-    if (response.statusCode == 201) {
+    if (response.statusCode == 201 || response.statusCode == 200) {
       return jsonDecode(response.body);
-    } else {
-      final error = jsonDecode(response.body);
-      throw Exception(error["error"] ?? "Failed to create bill");
     }
+    throw Exception(jsonDecode(response.body)["error"] ?? "Failed");
   }
 
   static Future<Map<String, dynamic>> scanMeterSheet(String token, List<int> imageBytes, String filename) async {
@@ -207,6 +271,22 @@ class ApiService {
       return jsonDecode(body);
     } else {
       throw Exception("OCR failed");
+    }
+  }
+
+  static Future<Map<String, dynamic>> getDashboard(String token) async {
+    final response = await http.get(
+      Uri.parse("$baseUrl/dashboard"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception("Failed to load dashboard");
     }
   }
 }
