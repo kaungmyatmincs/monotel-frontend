@@ -961,9 +961,7 @@ class _TenantsPageState extends State<TenantsPage> {
             onPressed: () async {
               final state = context.read<AppState>();
               // BUG FIX: also free the room when deactivating tenant
-              if (tenant['room_id'] != null) {
-                await ApiService.updateRoom(state.token, tenant['room_id'], {'is_occupied': false});
-              }
+          
               await ApiService.deactivateTenant(state.token, tenant['id']);
               if (!mounted) return;
               Navigator.pop(context);
