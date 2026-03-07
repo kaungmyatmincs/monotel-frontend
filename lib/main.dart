@@ -434,6 +434,7 @@ class _RoomsPageState extends State<RoomsPage> {
       final b = await ApiService.getBuildings(widget.token);
       if (mounted) setState(() {
         rooms = r;
+        buildings = b;
         loading = false;
       });
     } catch (e) {
@@ -471,6 +472,7 @@ class _RoomsPageState extends State<RoomsPage> {
           content: Column(mainAxisSize: MainAxisSize.min, children: [
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: "Building"),
+              value: selectedBuildingId,
               items: buildings.map<DropdownMenuItem<String>>((b) {
                 return DropdownMenuItem(value: b["id"] as String, child: Text(b["name"]));
               }).toList(),
