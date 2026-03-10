@@ -147,6 +147,7 @@ class _AdminLayoutState extends State<AdminLayout> {
               NavigationRailDestination(icon: Icon(Icons.people), label: Text('Tenants')),
               NavigationRailDestination(icon: Icon(Icons.receipt), label: Text('Billing')),
               NavigationRailDestination(icon: Icon(Icons.assignment), label: Text('Forms')),
+              NavigationRailDestination(icon: Icon(Icons.badge), label: Text('Residents')),
             ],
           ),
           const VerticalDivider(width: 1),
@@ -161,6 +162,7 @@ class _AdminLayoutState extends State<AdminLayout> {
                 TenantsPage(),
                 MeterInputPage(),
                 FormsPage(),
+                ResidentsPage(),
               ],
             ),
           ),
@@ -1610,10 +1612,6 @@ class _MeterInputPageState extends State<MeterInputPage> {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FORMS — Overnight Stay Registration
-// ─────────────────────────────────────────────────────────────────────────────
-
 class FormsPage extends StatefulWidget {
   const FormsPage({super.key});
 
@@ -1629,6 +1627,64 @@ class _FormsPageState extends State<FormsPage> {
   String message = '';
   String _lang = 'my';
 
+  // Settings
+  bool showSettings = false;
+  bool loadingSettings = true;
+  bool savingSettings = false;
+  String settingsMessage = '';
+  final hostNameCtrl = TextEditingController();
+  final wardNumberCtrl = TextEditingController();
+  final streetNameCtrl = TextEditingController();
+  String? hostGender;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  @override
+  void dispose() {
+    hostNameCtrl.dispose();
+    wardNumberCtrl.dispose();
+    streetNameCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final token = context.read<AppState>().token;
+      final data = await ApiService.getSettings(token);
+      setState(() {
+        hostNameCtrl.text = data['host_name'] ?? '';
+        wardNumberCtrl.text = data['ward_number'] ?? '';
+        streetNameCtrl.text = data['street_name'] ?? '';
+        hostGender = data['host_gender'];
+        loadingSettings = false;
+      });
+    } catch (e) {
+      setState(() => loadingSettings = false);
+    }
+  }
+
+  Future<void> _saveSettings() async {
+    setState(() { savingSettings = true; settingsMessage = ''; });
+    try {
+      final token = context.read<AppState>().token;
+      await ApiService.updateSettings(token, {
+        'host_name': hostNameCtrl.text,
+        'ward_number': wardNumberCtrl.text,
+        'street_name': streetNameCtrl.text,
+        'host_gender': hostGender ?? 'female',
+      });
+      setState(() => settingsMessage = '✅ Saved.');
+    } catch (e) {
+      setState(() => settingsMessage = '❌ Failed.');
+    } finally {
+      setState(() => savingSettings = false);
+    }
+  }
+
   String _formatDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
@@ -1639,12 +1695,10 @@ class _FormsPageState extends State<FormsPage> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-    if (picked != null) {
-      setState(() {
-        if (isFrom) fromDate = picked;
-        else toDate = picked;
-      });
-    }
+    if (picked != null) setState(() {
+      if (isFrom) fromDate = picked;
+      else toDate = picked;
+    });
   }
 
   Future<void> _generate() async {
@@ -1652,9 +1706,7 @@ class _FormsPageState extends State<FormsPage> {
       setState(() => message = 'Please select at least one room.');
       return;
     }
-
     setState(() { generating = true; message = ''; });
-
     try {
       final state = context.read<AppState>();
       final token = state.token;
@@ -1667,14 +1719,9 @@ class _FormsPageState extends State<FormsPage> {
         'http://localhost:3000/print/overnight-form'
         '?rooms=$roomIds&from_date=$from&to_date=$to&form_date=$today&lang=$_lang'
       );
-
-      final response = await http.get(uri, headers: {
-        'Authorization': 'Bearer $token',
-      });
-
+      final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
       if (response.statusCode == 200) {
-        final bytes = response.bodyBytes;
-        final base64Str = base64Encode(bytes);
+        final base64Str = base64Encode(response.bodyBytes);
         final dataUri = 'data:application/pdf;base64,$base64Str';
         html.AnchorElement(href: dataUri)
           ..setAttribute('download', 'overnight_form.pdf')
@@ -1693,9 +1740,7 @@ class _FormsPageState extends State<FormsPage> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    final occupiedRooms = state.rooms
-        .where((r) => r['is_occupied'] == true)
-        .toList();
+    final occupiedRooms = state.rooms.where((r) => r['is_occupied'] == true).toList();
 
     return Container(
       color: const Color(0xFFF5F5F0),
@@ -1724,16 +1769,12 @@ class _FormsPageState extends State<FormsPage> {
                           if (selectedRoomIds.length == occupiedRooms.length) {
                             selectedRoomIds.clear();
                           } else {
-                            selectedRoomIds = occupiedRooms
-                                .map((r) => r['id'] as String)
-                                .toSet();
+                            selectedRoomIds = occupiedRooms.map((r) => r['id'] as String).toSet();
                           }
                         });
                       },
                       child: Text(
-                        selectedRoomIds.length == occupiedRooms.length
-                            ? 'Deselect All'
-                            : 'Select All',
+                        selectedRoomIds.length == occupiedRooms.length ? 'Deselect All' : 'Select All',
                         style: const TextStyle(color: Color(0xFF2D4A3E)),
                       ),
                     ),
@@ -1753,12 +1794,10 @@ class _FormsPageState extends State<FormsPage> {
                                 orElse: () => null,
                               );
                               return GestureDetector(
-                                onTap: () {
-                                  setState(() {
-                                    if (selected) selectedRoomIds.remove(id);
-                                    else selectedRoomIds.add(id);
-                                  });
-                                },
+                                onTap: () => setState(() {
+                                  if (selected) selectedRoomIds.remove(id);
+                                  else selectedRoomIds.add(id);
+                                }),
                                 child: AnimatedContainer(
                                   duration: const Duration(milliseconds: 150),
                                   margin: const EdgeInsets.only(bottom: 8),
@@ -1778,21 +1817,17 @@ class _FormsPageState extends State<FormsPage> {
                                     ),
                                     const SizedBox(width: 12),
                                     Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      Text(
-                                        'Room ${room['room_number']}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: selected ? Colors.white : Colors.black,
-                                        ),
-                                      ),
-                                      if (tenant != null)
-                                        Text(
-                                          tenant['name'],
+                                      Text('Room ${room['room_number']}',
                                           style: TextStyle(
-                                            fontSize: 12,
-                                            color: selected ? Colors.white70 : Colors.grey,
-                                          ),
-                                        ),
+                                            fontWeight: FontWeight.bold,
+                                            color: selected ? Colors.white : Colors.black,
+                                          )),
+                                      if (tenant != null)
+                                        Text(tenant['name'],
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: selected ? Colors.white70 : Colors.grey,
+                                            )),
                                     ]),
                                   ]),
                                 ),
@@ -1806,152 +1841,675 @@ class _FormsPageState extends State<FormsPage> {
 
             const SizedBox(width: 24),
 
-            // RIGHT — options + generate
+            // RIGHT
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 48),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Date Range',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                        const SizedBox(height: 16),
-                        Row(children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => _pickDate(true),
-                              child: Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(children: [
-                                  const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                                  const SizedBox(width: 8),
-                                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    const Text('From', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                    Text(_formatDate(fromDate),
-                                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                                  ]),
-                                ]),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => _pickDate(false),
-                              child: Container(
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: Colors.grey.shade300),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(children: [
-                                  const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                                  const SizedBox(width: 8),
-                                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    const Text('To', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                    Text(_formatDate(toDate),
-                                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                                  ]),
-                                ]),
-                              ),
-                            ),
-                          ),
-                        ]),
-                        const SizedBox(height: 20),
-                        const Divider(),
-                        const SizedBox(height: 12),
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const SizedBox(height: 48),
 
-                        // Language toggle
-                        const Text('Form Language',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        const SizedBox(height: 8),
-                        Row(children: [
-                          ChoiceChip(
-                            label: const Text('မြန်မာ'),
-                            selected: _lang == 'my',
-                            onSelected: (_) => setState(() => _lang = 'my'),
-                            selectedColor: const Color(0xFF2D4A3E),
-                            labelStyle: TextStyle(
-                                color: _lang == 'my' ? Colors.white : Colors.black),
-                          ),
-                          const SizedBox(width: 8),
-                          ChoiceChip(
-                            label: const Text('English'),
-                            selected: _lang == 'en',
-                            onSelected: (_) => setState(() => _lang = 'en'),
-                            selectedColor: const Color(0xFF2D4A3E),
-                            labelStyle: TextStyle(
-                                color: _lang == 'en' ? Colors.white : Colors.black),
-                          ),
-                        ]),
-                        const SizedBox(height: 16),
-                        const Divider(),
-                        const SizedBox(height: 12),
-
-                        Row(children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2D4A3E).withOpacity(0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '${selectedRoomIds.length} room${selectedRoomIds.length == 1 ? '' : 's'} selected',
-                              style: const TextStyle(
-                                color: Color(0xFF2D4A3E),
-                                fontWeight: FontWeight.w600,
+                    // Main options card
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Date Range', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                          const SizedBox(height: 16),
+                          Row(children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => _pickDate(true),
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(children: [
+                                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                                    const SizedBox(width: 8),
+                                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      const Text('From', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                      Text(_formatDate(fromDate),
+                                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    ]),
+                                  ]),
+                                ),
                               ),
                             ),
-                          ),
-                        ]),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF2D4A3E),
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => _pickDate(false),
+                                child: Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.grey.shade300),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Row(children: [
+                                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                                    const SizedBox(width: 8),
+                                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      const Text('To', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                      Text(_formatDate(toDate),
+                                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                                    ]),
+                                  ]),
+                                ),
+                              ),
                             ),
-                            onPressed: generating ? null : _generate,
-                            icon: generating
-                                ? const SizedBox(
-                                    width: 16, height: 16,
-                                    child: CircularProgressIndicator(
-                                        color: Colors.white, strokeWidth: 2))
-                                : const Icon(Icons.download),
-                            label: Text(
-                              generating ? 'Generating...' : 'Generate & Download PDF',
-                              style: const TextStyle(fontSize: 15),
-                            ),
-                          ),
-                        ),
-                        if (message.isNotEmpty) ...[
+                          ]),
+                          const SizedBox(height: 20),
+                          const Divider(),
                           const SizedBox(height: 12),
-                          Text(message,
-                              style: TextStyle(
-                                  color: message.startsWith('✅') ? Colors.green : Colors.red)),
+                          const Text('Form Language', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            ChoiceChip(
+                              label: const Text('မြန်မာ'),
+                              selected: _lang == 'my',
+                              onSelected: (_) => setState(() => _lang = 'my'),
+                              selectedColor: const Color(0xFF2D4A3E),
+                              labelStyle: TextStyle(color: _lang == 'my' ? Colors.white : Colors.black),
+                            ),
+                            const SizedBox(width: 8),
+                            ChoiceChip(
+                              label: const Text('English'),
+                              selected: _lang == 'en',
+                              onSelected: (_) => setState(() => _lang = 'en'),
+                              selectedColor: const Color(0xFF2D4A3E),
+                              labelStyle: TextStyle(color: _lang == 'en' ? Colors.white : Colors.black),
+                            ),
+                          ]),
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2D4A3E).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Text(
+                                '${selectedRoomIds.length} room${selectedRoomIds.length == 1 ? '' : 's'} selected',
+                                style: const TextStyle(color: Color(0xFF2D4A3E), fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF2D4A3E),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                              onPressed: generating ? null : _generate,
+                              icon: generating
+                                  ? const SizedBox(width: 16, height: 16,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                  : const Icon(Icons.download),
+                              label: Text(
+                                generating ? 'Generating...' : 'Generate & Download PDF',
+                                style: const TextStyle(fontSize: 15),
+                              ),
+                            ),
+                          ),
+                          if (message.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Text(message,
+                                style: TextStyle(
+                                    color: message.startsWith('✅') ? Colors.green : Colors.red)),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
-                  ),
-                ],
+
+                    const SizedBox(height: 12),
+
+                    // Form Settings collapsible
+                    GestureDetector(
+                      onTap: () => setState(() => showSettings = !showSettings),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2D4A3E),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                          const Text('⚙️ Form Settings',
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          Row(children: [
+                            Text(
+                              loadingSettings ? '' : '${hostNameCtrl.text}  •  Ward ${wardNumberCtrl.text}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                            const SizedBox(width: 8),
+                            Icon(showSettings ? Icons.expand_less : Icons.expand_more, color: Colors.white),
+                          ]),
+                        ]),
+                      ),
+                    ),
+
+                    if (showSettings) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
+                        child: loadingSettings
+                            ? const Center(child: CircularProgressIndicator())
+                            : Column(children: [
+                                Row(children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: hostNameCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Host Name',
+                                        border: OutlineInputBorder(),
+                                        filled: true, fillColor: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: DropdownButtonFormField<String>(
+                                      value: hostGender,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Gender',
+                                        border: OutlineInputBorder(),
+                                        filled: true, fillColor: Colors.white,
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(value: 'male', child: Text('Male (ဦး)')),
+                                        DropdownMenuItem(value: 'female', child: Text('Female (ဒေါ်)')),
+                                      ],
+                                      onChanged: (v) => setState(() => hostGender = v),
+                                    ),
+                                  ),
+                                ]),
+                                const SizedBox(height: 12),
+                                Row(children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: wardNumberCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Ward Number',
+                                        border: OutlineInputBorder(),
+                                        filled: true, fillColor: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: TextField(
+                                      controller: streetNameCtrl,
+                                      decoration: const InputDecoration(
+                                        labelText: 'Street Name',
+                                        border: OutlineInputBorder(),
+                                        filled: true, fillColor: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ]),
+                                const SizedBox(height: 12),
+                                Row(children: [
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2D4A3E),
+                                      foregroundColor: Colors.white,
+                                    ),
+                                    onPressed: savingSettings ? null : _saveSettings,
+                                    child: savingSettings
+                                        ? const SizedBox(width: 14, height: 14,
+                                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                        : const Text('Save'),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  if (settingsMessage.isNotEmpty)
+                                    Text(settingsMessage,
+                                        style: TextStyle(
+                                            color: settingsMessage.startsWith('✅') ? Colors.green : Colors.red)),
+                                ]),
+                              ]),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESIDENTS — Full tenant profile management
+// ─────────────────────────────────────────────────────────────────────────────
+
+class ResidentsPage extends StatefulWidget {
+  const ResidentsPage({super.key});
+
+  @override
+  State<ResidentsPage> createState() => _ResidentsPageState();
+}
+
+class _ResidentsPageState extends State<ResidentsPage> {
+  Map<String, dynamic>? selectedTenant;
+
+  void _selectTenant(Map<String, dynamic> t) {
+    setState(() => selectedTenant = t);
+  }
+
+  void _showAddResident(BuildContext context) {
+    final state = context.read<AppState>();
+    final nameCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    String? selectedRoomId;
+    final vacantRooms = state.rooms
+        .where((r) => r['is_occupied'] == false || r['is_occupied'] == null)
+        .toList();
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setS) => AlertDialog(
+          title: const Text('Add Resident'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name')),
+            TextField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone'),
+                keyboardType: TextInputType.phone),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              decoration: const InputDecoration(labelText: 'Assign Room'),
+              value: selectedRoomId,
+              items: vacantRooms.map<DropdownMenuItem<String>>((r) => DropdownMenuItem(
+                  value: r['id'] as String,
+                  child: Text('Room ${r['room_number']} - ฿${r['monthly_rent']}'))).toList(),
+              onChanged: (val) => setS(() => selectedRoomId = val),
+            ),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2D4A3E), foregroundColor: Colors.white),
+              onPressed: () async {
+                if (selectedRoomId == null) return;
+                await ApiService.createTenant(state.token, nameCtrl.text, phoneCtrl.text, selectedRoomId!);
+                await ApiService.updateRoom(state.token, selectedRoomId!, {'is_occupied': true});
+                if (!ctx.mounted) return;
+                Navigator.pop(ctx);
+                state.refreshAfterTenantChange();
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDeactivate(BuildContext context, Map<String, dynamic> tenant) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Resident?'),
+        content: Text('${tenant["name"]} will be marked inactive. Bill history is kept.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            onPressed: () async {
+              final state = context.read<AppState>();
+              await ApiService.deactivateTenant(state.token, tenant['id']);
+              if (!mounted) return;
+              Navigator.pop(context);
+              setState(() => selectedTenant = null);
+              state.refreshAfterTenantChange();
+            },
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final tenants = state.tenants;
+
+    return Row(
+      children: [
+        // LEFT — tenant list
+        Container(
+          width: 260,
+          color: const Color(0xFFF0F0EB),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  const Text('Residents', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  IconButton(
+                    icon: const Icon(Icons.person_add, color: Color(0xFF2D4A3E)),
+                    onPressed: () => _showAddResident(context),
+                  ),
+                ]),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: tenants.isEmpty
+                    ? const Center(child: Text('No residents yet'))
+                    : ListView.builder(
+                        itemCount: tenants.length,
+                        itemBuilder: (context, index) {
+                          final t = tenants[index];
+                          final isSelected = selectedTenant?['id'] == t['id'];
+                          return ListTile(
+                            selected: isSelected,
+                            selectedTileColor: const Color(0xFF2D4A3E).withOpacity(0.1),
+                            leading: CircleAvatar(
+                              backgroundColor: const Color(0xFF2D4A3E),
+                              child: Text(t['name'][0].toUpperCase(),
+                                  style: const TextStyle(color: Colors.white, fontSize: 14)),
+                            ),
+                            title: Text(t['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Text('Room ${t['room_number'] ?? '-'}'),
+                            onTap: () => _selectTenant(t),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1),
+        Expanded(
+          child: selectedTenant == null
+              ? const Center(child: Text('Select a resident'))
+              : _ResidentDetailPanel(
+                  key: ValueKey(selectedTenant!['id']),
+                  tenant: selectedTenant!,
+                  onDeactivate: () => _confirmDeactivate(context, selectedTenant!),
+                  onSaved: (updated) {
+                    setState(() => selectedTenant = updated);
+                    context.read<AppState>().refreshTenants();
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ResidentDetailPanel extends StatefulWidget {
+  final Map<String, dynamic> tenant;
+  final VoidCallback onDeactivate;
+  final Function(Map<String, dynamic>) onSaved;
+
+  const _ResidentDetailPanel({
+    super.key,
+    required this.tenant,
+    required this.onDeactivate,
+    required this.onSaved,
+  });
+
+  @override
+  State<_ResidentDetailPanel> createState() => _ResidentDetailPanelState();
+}
+
+class _ResidentDetailPanelState extends State<_ResidentDetailPanel> {
+  late TextEditingController nameCtrl;
+  late TextEditingController phoneCtrl;
+  late TextEditingController fatherCtrl;
+  late TextEditingController motherCtrl;
+  late TextEditingController nrcCtrl;
+  late TextEditingController ethnicityCtrl;
+  late TextEditingController occupationCtrl;
+  late TextEditingController relationshipCtrl;
+  late TextEditingController prevAddressCtrl;
+  late TextEditingController visitPurposeCtrl;
+  String? selectedGender;
+  DateTime? selectedDob;
+  bool saving = false;
+  String message = '';
+
+  @override
+  void initState() {
+    super.initState();
+    final t = widget.tenant;
+    nameCtrl = TextEditingController(text: t['name'] ?? '');
+    phoneCtrl = TextEditingController(text: t['phone'] ?? '');
+    fatherCtrl = TextEditingController(text: t['father_name'] ?? '');
+    motherCtrl = TextEditingController(text: t['mother_name'] ?? '');
+    nrcCtrl = TextEditingController(text: t['nrc_number'] ?? '');
+    ethnicityCtrl = TextEditingController(text: t['ethnicity'] ?? '');
+    occupationCtrl = TextEditingController(text: t['occupation'] ?? '');
+    relationshipCtrl = TextEditingController(text: t['relationship'] ?? '');
+    prevAddressCtrl = TextEditingController(text: t['previous_address'] ?? '');
+    visitPurposeCtrl = TextEditingController(text: t['visit_purpose'] ?? '');
+    selectedGender = t['gender'];
+    if (t['date_of_birth'] != null) {
+      selectedDob = DateTime.tryParse(t['date_of_birth']);
+    }
+  }
+
+  @override
+  void dispose() {
+    nameCtrl.dispose(); phoneCtrl.dispose(); fatherCtrl.dispose();
+    motherCtrl.dispose(); nrcCtrl.dispose(); ethnicityCtrl.dispose();
+    occupationCtrl.dispose(); relationshipCtrl.dispose();
+    prevAddressCtrl.dispose(); visitPurposeCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    setState(() { saving = true; message = ''; });
+    try {
+      final state = context.read<AppState>();
+      final data = {
+        'name': nameCtrl.text,
+        'phone': phoneCtrl.text,
+        'father_name': fatherCtrl.text,
+        'mother_name': motherCtrl.text,
+        'nrc_number': nrcCtrl.text,
+        'ethnicity': ethnicityCtrl.text,
+        'occupation': occupationCtrl.text,
+        'relationship': relationshipCtrl.text,
+        'previous_address': prevAddressCtrl.text,
+        'visit_purpose': visitPurposeCtrl.text,
+        'gender': selectedGender,
+        if (selectedDob != null)
+          'date_of_birth': selectedDob!.toIso8601String().substring(0, 10),
+      };
+      await ApiService.updateTenant(state.token, widget.tenant['id'], data);
+      setState(() => message = '✅ Saved.');
+      widget.onSaved({...widget.tenant, ...data});
+    } catch (e) {
+      setState(() => message = '❌ Failed: $e');
+    } finally {
+      setState(() => saving = false);
+    }
+  }
+
+  Widget _field(String label, TextEditingController ctrl, {int maxLines = 1}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: ctrl,
+        maxLines: maxLines,
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          filled: true,
+          fillColor: Colors.white,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.tenant;
+    return Container(
+      color: const Color(0xFFF5F5F0),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            color: Colors.white,
+            child: Row(children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: const Color(0xFF2D4A3E),
+                child: Text(t['name'][0].toUpperCase(),
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(t['name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text('Room ${t['room_number'] ?? '-'}',
+                      style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                ]),
+              ),
+              TextButton.icon(
+                icon: const Icon(Icons.person_remove, color: Colors.red, size: 18),
+                label: const Text('Remove', style: TextStyle(color: Colors.red)),
+                onPressed: widget.onDeactivate,
+              ),
+            ]),
+          ),
+          // Form
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Basic Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: _field('Full Name', nameCtrl)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _field('Phone', phoneCtrl)),
+                  ]),
+                  Row(children: [
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: GestureDetector(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDob ?? DateTime(1990),
+                              firstDate: DateTime(1920),
+                              lastDate: DateTime.now(),
+                            );
+                            if (picked != null) setState(() => selectedDob = picked);
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.grey.shade400),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Row(children: [
+                              const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                              const SizedBox(width: 8),
+                              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                const Text('Date of Birth', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                Text(
+                                  selectedDob != null
+                                      ? '${selectedDob!.year}-${selectedDob!.month.toString().padLeft(2,'0')}-${selectedDob!.day.toString().padLeft(2,'0')}'
+                                      : 'Select date',
+                                  style: const TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                              ]),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: DropdownButtonFormField<String>(
+                          value: selectedGender,
+                          decoration: const InputDecoration(
+                            labelText: 'Gender',
+                            border: OutlineInputBorder(),
+                            filled: true,
+                            fillColor: Colors.white,
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'male', child: Text('Male')),
+                            DropdownMenuItem(value: 'female', child: Text('Female')),
+                          ],
+                          onChanged: (v) => setState(() => selectedGender = v),
+                        ),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 4),
+                  const Text('Identity', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: _field('NRC Number', nrcCtrl)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _field('Ethnicity', ethnicityCtrl)),
+                  ]),
+                  Row(children: [
+                    Expanded(child: _field("Father's Name", fatherCtrl)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _field("Mother's Name", motherCtrl)),
+                  ]),
+                  const SizedBox(height: 4),
+                  const Text('Stay Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 12),
+                  Row(children: [
+                    Expanded(child: _field('Occupation', occupationCtrl)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _field('Relationship to Host', relationshipCtrl)),
+                  ]),
+                  _field('Purpose of Visit', visitPurposeCtrl),
+                  _field('Previous Address', prevAddressCtrl, maxLines: 2),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2D4A3E),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                      ),
+                      onPressed: saving ? null : _save,
+                      child: saving
+                          ? const SizedBox(width: 16, height: 16,
+                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Text('Save Changes'),
+                    ),
+                    const SizedBox(width: 12),
+                    if (message.isNotEmpty)
+                      Text(message,
+                          style: TextStyle(
+                              color: message.startsWith('✅') ? Colors.green : Colors.red)),
+                  ]),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
