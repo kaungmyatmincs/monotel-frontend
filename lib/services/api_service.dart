@@ -289,5 +289,22 @@ class ApiService {
       throw Exception("Failed to load dashboard");
     }
   }
+
+  static Future<Map<String, dynamic>> getSettings(String token) async {
+    final response = await http.get(
+      Uri.parse("$baseUrl/settings"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception("Failed to load settings");
+  }
+
+  static Future<void> updateSettings(String token, Map<String, dynamic> data) async {
+    await http.patch(
+      Uri.parse("$baseUrl/settings"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode(data),
+    );
+  }
 }
     

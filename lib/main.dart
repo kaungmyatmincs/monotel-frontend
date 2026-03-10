@@ -3,6 +3,10 @@ import 'package:provider/provider.dart';
 import 'providers/app_state.dart';
 import 'services/api_service.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:html' as html;
+import 'dart:typed_data';
 
 void main() {
   runApp(
@@ -142,6 +146,7 @@ class _AdminLayoutState extends State<AdminLayout> {
               NavigationRailDestination(icon: Icon(Icons.meeting_room), label: Text('Rooms')),
               NavigationRailDestination(icon: Icon(Icons.people), label: Text('Tenants')),
               NavigationRailDestination(icon: Icon(Icons.receipt), label: Text('Billing')),
+              NavigationRailDestination(icon: Icon(Icons.assignment), label: Text('Forms')),
             ],
           ),
           const VerticalDivider(width: 1),
@@ -155,6 +160,7 @@ class _AdminLayoutState extends State<AdminLayout> {
                 RoomsPage(),
                 TenantsPage(),
                 MeterInputPage(),
+                FormsPage(),
               ],
             ),
           ),
@@ -1600,6 +1606,353 @@ class _MeterInputPageState extends State<MeterInputPage> {
         Text(value,
             style: TextStyle(fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: 13)),
       ]),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMS — Overnight Stay Registration
+// ─────────────────────────────────────────────────────────────────────────────
+
+class FormsPage extends StatefulWidget {
+  const FormsPage({super.key});
+
+  @override
+  State<FormsPage> createState() => _FormsPageState();
+}
+
+class _FormsPageState extends State<FormsPage> {
+  Set<String> selectedRoomIds = {};
+  DateTime fromDate = DateTime.now();
+  DateTime toDate = DateTime.now().add(const Duration(days: 90));
+  bool generating = false;
+  String message = '';
+  String _lang = 'my';
+
+  String _formatDate(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDate(bool isFrom) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: isFrom ? fromDate : toDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+    if (picked != null) {
+      setState(() {
+        if (isFrom) fromDate = picked;
+        else toDate = picked;
+      });
+    }
+  }
+
+  Future<void> _generate() async {
+    if (selectedRoomIds.isEmpty) {
+      setState(() => message = 'Please select at least one room.');
+      return;
+    }
+
+    setState(() { generating = true; message = ''; });
+
+    try {
+      final state = context.read<AppState>();
+      final token = state.token;
+      final roomIds = selectedRoomIds.join(',');
+      final from = _formatDate(fromDate);
+      final to = _formatDate(toDate);
+      final today = _formatDate(DateTime.now());
+
+      final uri = Uri.parse(
+        'http://localhost:3000/print/overnight-form'
+        '?rooms=$roomIds&from_date=$from&to_date=$to&form_date=$today&lang=$_lang'
+      );
+
+      final response = await http.get(uri, headers: {
+        'Authorization': 'Bearer $token',
+      });
+
+      if (response.statusCode == 200) {
+        final bytes = response.bodyBytes;
+        final base64Str = base64Encode(bytes);
+        final dataUri = 'data:application/pdf;base64,$base64Str';
+        html.AnchorElement(href: dataUri)
+          ..setAttribute('download', 'overnight_form.pdf')
+          ..click();
+        setState(() => message = '✅ PDF downloaded.');
+      } else {
+        setState(() => message = '❌ Failed: ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() => message = '❌ Error: $e');
+    } finally {
+      setState(() => generating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final occupiedRooms = state.rooms
+        .where((r) => r['is_occupied'] == true)
+        .toList();
+
+    return Container(
+      color: const Color(0xFFF5F5F0),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // LEFT — room selector
+            SizedBox(
+              width: 280,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Forms', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  const Text('Overnight Stay Registration',
+                      style: TextStyle(color: Colors.grey, fontSize: 13)),
+                  const SizedBox(height: 20),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('Select Rooms',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          if (selectedRoomIds.length == occupiedRooms.length) {
+                            selectedRoomIds.clear();
+                          } else {
+                            selectedRoomIds = occupiedRooms
+                                .map((r) => r['id'] as String)
+                                .toSet();
+                          }
+                        });
+                      },
+                      child: Text(
+                        selectedRoomIds.length == occupiedRooms.length
+                            ? 'Deselect All'
+                            : 'Select All',
+                        style: const TextStyle(color: Color(0xFF2D4A3E)),
+                      ),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: occupiedRooms.isEmpty
+                        ? const Center(child: Text('No occupied rooms'))
+                        : ListView.builder(
+                            itemCount: occupiedRooms.length,
+                            itemBuilder: (context, index) {
+                              final room = occupiedRooms[index];
+                              final id = room['id'] as String;
+                              final selected = selectedRoomIds.contains(id);
+                              final tenant = state.tenants.firstWhere(
+                                (t) => t['room_id'] == id && t['is_active'] == true,
+                                orElse: () => null,
+                              );
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    if (selected) selectedRoomIds.remove(id);
+                                    else selectedRoomIds.add(id);
+                                  });
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: selected ? const Color(0xFF2D4A3E) : Colors.white,
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: selected ? const Color(0xFF2D4A3E) : Colors.grey.shade200,
+                                    ),
+                                  ),
+                                  child: Row(children: [
+                                    Icon(
+                                      selected ? Icons.check_box : Icons.check_box_outline_blank,
+                                      color: selected ? Colors.white : Colors.grey,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      Text(
+                                        'Room ${room['room_number']}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: selected ? Colors.white : Colors.black,
+                                        ),
+                                      ),
+                                      if (tenant != null)
+                                        Text(
+                                          tenant['name'],
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: selected ? Colors.white70 : Colors.grey,
+                                          ),
+                                        ),
+                                    ]),
+                                  ]),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 24),
+
+            // RIGHT — options + generate
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 48),
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Date Range',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        const SizedBox(height: 16),
+                        Row(children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _pickDate(true),
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade300),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(children: [
+                                  const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    const Text('From', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                    Text(_formatDate(fromDate),
+                                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  ]),
+                                ]),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _pickDate(false),
+                              child: Container(
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: Colors.grey.shade300),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(children: [
+                                  const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    const Text('To', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                                    Text(_formatDate(toDate),
+                                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                                  ]),
+                                ]),
+                              ),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 20),
+                        const Divider(),
+                        const SizedBox(height: 12),
+
+                        // Language toggle
+                        const Text('Form Language',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        const SizedBox(height: 8),
+                        Row(children: [
+                          ChoiceChip(
+                            label: const Text('မြန်မာ'),
+                            selected: _lang == 'my',
+                            onSelected: (_) => setState(() => _lang = 'my'),
+                            selectedColor: const Color(0xFF2D4A3E),
+                            labelStyle: TextStyle(
+                                color: _lang == 'my' ? Colors.white : Colors.black),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('English'),
+                            selected: _lang == 'en',
+                            onSelected: (_) => setState(() => _lang = 'en'),
+                            selectedColor: const Color(0xFF2D4A3E),
+                            labelStyle: TextStyle(
+                                color: _lang == 'en' ? Colors.white : Colors.black),
+                          ),
+                        ]),
+                        const SizedBox(height: 16),
+                        const Divider(),
+                        const SizedBox(height: 12),
+
+                        Row(children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2D4A3E).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              '${selectedRoomIds.length} room${selectedRoomIds.length == 1 ? '' : 's'} selected',
+                              style: const TextStyle(
+                                color: Color(0xFF2D4A3E),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ]),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF2D4A3E),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            onPressed: generating ? null : _generate,
+                            icon: generating
+                                ? const SizedBox(
+                                    width: 16, height: 16,
+                                    child: CircularProgressIndicator(
+                                        color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.download),
+                            label: Text(
+                              generating ? 'Generating...' : 'Generate & Download PDF',
+                              style: const TextStyle(fontSize: 15),
+                            ),
+                          ),
+                        ),
+                        if (message.isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(message,
+                              style: TextStyle(
+                                  color: message.startsWith('✅') ? Colors.green : Colors.red)),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
