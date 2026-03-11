@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiService {
@@ -24,17 +25,17 @@ class ApiService {
 
   static Future<List<dynamic>> getBuildings(String token) async {
     final response = await http.get(
-        Uri.parse("$baseUrl/buildings"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/buildings"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+      return jsonDecode(response.body);
     } else {
-        throw Exception("Failed to load buildings");
+      throw Exception("Failed to load buildings");
     }
   }
 
@@ -57,31 +58,31 @@ class ApiService {
 
   static Future<List<dynamic>> getRooms(String token) async {
     final response = await http.get(
-        Uri.parse("$baseUrl/rooms"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/rooms"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+      return jsonDecode(response.body);
     } else {
-        throw Exception("Failed to load rooms");
+      throw Exception("Failed to load rooms");
     }
   }
 
   static Future<void> toggleRoom(String token, String roomId) async {
     final response = await http.patch(
-        Uri.parse("$baseUrl/rooms/$roomId/toggle"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/rooms/$roomId/toggle"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode != 200) {
-        throw Exception("Failed to toggle room");
+      throw Exception("Failed to toggle room");
     }
   }
 
@@ -112,17 +113,17 @@ class ApiService {
 
   static Future<List<dynamic>> getTenants(String token) async {
     final response = await http.get(
-        Uri.parse("$baseUrl/tenants"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/tenants"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+      return jsonDecode(response.body);
     } else {
-        throw Exception("Failed to load tenants");
+      throw Exception("Failed to load tenants");
     }
   }
 
@@ -159,62 +160,62 @@ class ApiService {
 
   static Future<Map<String, dynamic>?> getCurrentBill(String token, String tenantId) async {
     final response = await http.get(
-        Uri.parse("$baseUrl/tenants/$tenantId/current-bill"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/tenants/$tenantId/current-bill"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode == 200) {
-        if (response.body == "null") return null;
-            return jsonDecode(response.body);
+      if (response.body == "null") return null;
+      return jsonDecode(response.body);
     } else {
-            throw Exception("Failed to load bill");
+      throw Exception("Failed to load bill");
     }
   }
 
   static Future<void> markBillPaid(String token, String billId) async {
     final response = await http.patch(
-        Uri.parse("$baseUrl/tenants/bills/$billId/mark-paid"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/tenants/bills/$billId/mark-paid"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode != 200) {
-        throw Exception("Failed to mark bill paid");
+      throw Exception("Failed to mark bill paid");
     }
   }
 
   static Future<List<dynamic>> getAllBills(String token, String tenantId) async {
     final response = await http.get(
-        Uri.parse("$baseUrl/tenants/$tenantId/bills"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/tenants/$tenantId/bills"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+      return jsonDecode(response.body);
     } else {
-        throw Exception("Failed to load bills");
+      throw Exception("Failed to load bills");
     }
   }
 
   static Future<void> markBillUnpaid(String token, String billId) async {
     final response = await http.patch(
-        Uri.parse("$baseUrl/tenants/bills/$billId/mark-unpaid"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
+      Uri.parse("$baseUrl/tenants/bills/$billId/mark-unpaid"),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer $token",
+      },
     );
 
     if (response.statusCode != 200) {
-        throw Exception("Failed to mark bill unpaid");
+      throw Exception("Failed to mark bill unpaid");
     }
   }
 
@@ -306,5 +307,73 @@ class ApiService {
       body: jsonEncode(data),
     );
   }
+
+  // ── New Bills API (bills.js routes) ─────────────────────────────────────────
+
+  static Future<List<dynamic>> getBillsByRoom(String token, String roomId) async {
+    final response = await http.get(
+      Uri.parse("$baseUrl/bills/room/$roomId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    if (response.statusCode == 200) return jsonDecode(response.body);
+    throw Exception("Failed to load bills");
+  }
+
+  static Future<Map<String, dynamic>> createBill(
+    String token, {
+    required String tenantId,
+    required String month,
+    required double elecPrev,
+    required double elecCurr,
+    required double elecRate,
+    required double waterPrev,
+    required double waterCurr,
+    required double waterRate,
+    List<Map<String, dynamic>> extraCharges = const [],
+  }) async {
+    final response = await http.post(
+      Uri.parse("$baseUrl/bills"),
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
+      body: jsonEncode({
+        "tenant_id": tenantId,
+        "month": month,
+        "elec_prev": elecPrev,
+        "elec_curr": elecCurr,
+        "elec_rate": elecRate,
+        "water_prev": waterPrev,
+        "water_curr": waterCurr,
+        "water_rate": waterRate,
+        "extra_charges": extraCharges,
+      }),
+    );
+    if (response.statusCode == 201) return jsonDecode(response.body);
+    final err = jsonDecode(response.body);
+    throw Exception(err["error"] ?? "Failed to create bill");
+  }
+
+  static Future<void> payBill(String token, String billId) async {
+    final response = await http.patch(
+      Uri.parse("$baseUrl/bills/$billId/pay"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    if (response.statusCode != 200) throw Exception("Failed to mark paid");
+  }
+
+  static Future<void> deleteBill(String token, String billId) async {
+    final response = await http.delete(
+      Uri.parse("$baseUrl/bills/$billId"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    if (response.statusCode != 200) throw Exception("Failed to delete bill");
+  }
+
+  // GET /print/receipt/:billId?lang=my  → returns raw PDF bytes
+  static Future<Uint8List> getReceiptPdf(String token, String billId, {String lang = "my"}) async {
+    final response = await http.get(
+      Uri.parse("$baseUrl/print/receipt/$billId?lang=$lang"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+    if (response.statusCode == 200) return response.bodyBytes;
+    throw Exception("Failed to generate receipt");
+  }
 }
-    

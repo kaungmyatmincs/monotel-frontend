@@ -160,7 +160,7 @@ class _AdminLayoutState extends State<AdminLayout> {
                 BuildingsPage(),
                 RoomsPage(),
                 TenantsPage(),
-                MeterInputPage(),
+                BillingPage(),   // ← swapped
                 FormsPage(),
                 ResidentsPage(),
               ],
@@ -771,7 +771,7 @@ class RoomsPage extends StatelessWidget {
                   crossAxisCount: 4,
                   crossAxisSpacing: 16,
                   mainAxisSpacing: 16,
-                  childAspectRatio: 1.6,
+                  childAspectRatio: 0.7,
                 ),
                 itemCount: rooms.length,
                 itemBuilder: (context, index) {
@@ -996,7 +996,7 @@ class _TenantsPageState extends State<TenantsPage> {
       children: [
         // LEFT: tenant list
         Container(
-          width: 260,
+          width: 220,
           color: const Color(0xFFF0F0EB),
           child: Column(
             children: [
@@ -1856,56 +1856,6 @@ class _FormsPageState extends State<FormsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Date Range', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                          const SizedBox(height: 16),
-                          Row(children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => _pickDate(true),
-                                child: Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade300),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(children: [
-                                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 8),
-                                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      const Text('From', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                      Text(_formatDate(fromDate),
-                                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                                    ]),
-                                  ]),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => _pickDate(false),
-                                child: Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: Colors.grey.shade300),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(children: [
-                                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 8),
-                                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      const Text('To', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                      Text(_formatDate(toDate),
-                                          style: const TextStyle(fontWeight: FontWeight.w600)),
-                                    ]),
-                                  ]),
-                                ),
-                              ),
-                            ),
-                          ]),
-                          const SizedBox(height: 20),
-                          const Divider(),
-                          const SizedBox(height: 12),
                           const Text('Form Language', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                           const SizedBox(height: 8),
                           Row(children: [
@@ -2377,7 +2327,7 @@ class _ResidentDetailPanelState extends State<_ResidentDetailPanel> {
               const SizedBox(width: 16),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t['name'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(t['name'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                   Text('Room ${t['room_number'] ?? '-'}',
                       style: const TextStyle(color: Colors.grey, fontSize: 13)),
                 ]),
@@ -2514,3 +2464,702 @@ class _ResidentDetailPanelState extends State<_ResidentDetailPanel> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Billing — Full bill receipt managment
+// ─────────────────────────────────────────────────────────────────────────────
+
+class BillingPage extends StatefulWidget {
+  const BillingPage({super.key});
+
+  @override
+  State<BillingPage> createState() => _BillingPageState();
+}
+
+class _BillingPageState extends State<BillingPage> {
+  List<dynamic> _rooms = [];
+  List<dynamic> _bills = [];
+  dynamic _selectedRoom;
+  bool _loadingRooms = true;
+  bool _loadingBills = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRooms();
+  }
+
+  Future<void> _loadRooms() async {
+    final token = context.read<AppState>().token;
+    final rooms = await ApiService.getRooms(token);
+    // Only occupied rooms make sense for billing
+    setState(() {
+      _rooms = rooms.where((r) => r['is_occupied'] == true).toList();
+      _loadingRooms = false;
+    });
+  }
+
+  Future<void> _loadBills(String roomId) async {
+    setState(() => _loadingBills = true);
+    final token = context.read<AppState>().token;
+    final bills = await ApiService.getBillsByRoom(token, roomId);
+    setState(() {
+      _bills = bills;
+      _loadingBills = false;
+    });
+  }
+
+  void _selectRoom(dynamic room) {
+    setState(() {
+      _selectedRoom = room;
+      _bills = [];
+    });
+    _loadBills(room['id']);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        // ── Left: Room list ──────────────────────────────────────────────────
+        Container(
+          width: 220,
+          decoration: BoxDecoration(
+            border: Border(right: BorderSide(color: Colors.grey.shade300)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+                child: Text("Rooms", style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+              ),
+              Expanded(
+                child: _loadingRooms
+                    ? const Center(child: CircularProgressIndicator())
+                    : _rooms.isEmpty
+                        ? const Center(child: Text("No occupied rooms", style: TextStyle(color: Colors.grey)))
+                        : ListView.builder(
+                            itemCount: _rooms.length,
+                            itemBuilder: (context, i) {
+                              final room = _rooms[i];
+                              final selected = _selectedRoom?['id'] == room['id'];
+                              return ListTile(
+                                selected: selected,
+                                selectedTileColor: Colors.blue.shade50,
+                                leading: CircleAvatar(
+                                  backgroundColor: selected ? Colors.blue : Colors.grey.shade200,
+                                  child: Text(
+                                    room['room_number'] ?? '',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: selected ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                                title: Text("Room ${room['room_number']}", style: const TextStyle(fontSize: 13)),
+                                subtitle: Text(
+                                  "${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '—'} ks/mo",
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                onTap: () => _selectRoom(room),
+                              );
+                            },
+                          ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Right: Bills panel ───────────────────────────────────────────────
+        Expanded(
+          child: _selectedRoom == null
+              ? const Center(child: Text("Select a room to view bills", style: TextStyle(color: Colors.grey)))
+              : _BillsPanel(
+                  room: _selectedRoom,
+                  bills: _bills,
+                  loading: _loadingBills,
+                  onRefresh: () => _loadBills(_selectedRoom['id']),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Bills Panel ───────────────────────────────────────────────────────────────
+
+class _BillsPanel extends StatelessWidget {
+  final dynamic room;
+  final List<dynamic> bills;
+  final bool loading;
+  final VoidCallback onRefresh;
+
+  const _BillsPanel({
+    required this.room,
+    required this.bills,
+    required this.loading,
+    required this.onRefresh,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+          ),
+          child: Row(
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Room ${room['room_number']}", style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                  Text("${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '—'} ks/month rent",
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                ],
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: () => _showCreateBillDialog(context),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text("New Bill"),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+        ),
+
+        // Bills list
+        Expanded(
+          child: loading
+              ? const Center(child: CircularProgressIndicator())
+              : bills.isEmpty
+                  ? const Center(child: Text("No bills yet for this room", style: TextStyle(color: Colors.grey)))
+                  : ListView.separated(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: bills.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, i) => _BillCard(
+                        bill: bills[i],
+                        onRefresh: onRefresh,
+                      ),
+                    ),
+        ),
+      ],
+    );
+  }
+
+  void _showCreateBillDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => _CreateBillDialog(room: room, onCreated: onRefresh),
+    );
+  }
+}
+
+// ── Bill Card ─────────────────────────────────────────────────────────────────
+
+class _BillCard extends StatelessWidget {
+  final dynamic bill;
+  final VoidCallback onRefresh;
+
+  const _BillCard({required this.bill, required this.onRefresh});
+
+  @override
+  Widget build(BuildContext context) {
+    final isPaid = bill['status'] == 'paid';
+    final amount = double.tryParse(bill['amount'].toString())?.toStringAsFixed(0) ?? '0';
+    final extras = bill['extra_charges'] is List
+        ? bill['extra_charges'] as List
+        : jsonDecode(bill['extra_charges'] ?? '[]') as List;
+
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top row
+            Row(
+              children: [
+                Text(bill['month'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(width: 10),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isPaid ? Colors.green.shade50 : Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isPaid ? Colors.green.shade200 : Colors.orange.shade200),
+                  ),
+                  child: Text(
+                    isPaid ? "Paid" : "Unpaid",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isPaid ? Colors.green.shade700 : Colors.orange.shade700,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Text("${_fmtNum(int.parse(amount))} ks",
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Breakdown
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
+              children: [
+                _chip(Icons.home_outlined, "Rent: ${_fmt(bill['rent'])} ks"),
+                _chip(Icons.flash_on_outlined, "Elec: ${_fmt(bill['electricity'])} ks (${_units(bill['elec_prev'], bill['elec_curr'])} u)"),
+                _chip(Icons.water_drop_outlined, "Water: ${_fmt(bill['water'])} ks (${_units(bill['water_prev'], bill['water_curr'])} u)"),
+                if (extras.isNotEmpty)
+                  ...extras.map((e) => _chip(Icons.add_circle_outline, "${e['label']}: ${_fmt(e['amount'])} ks")),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Actions
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Receipt MY
+                TextButton.icon(
+                  onPressed: () => _downloadReceipt(context, bill['id'], 'my'),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text("မြန်မာ PDF"),
+                  style: TextButton.styleFrom(foregroundColor: Colors.teal),
+                ),
+                // Receipt EN
+                TextButton.icon(
+                  onPressed: () => _downloadReceipt(context, bill['id'], 'en'),
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text("Eng PDF"),
+                  style: TextButton.styleFrom(foregroundColor: Colors.teal.shade300),
+                ),
+                const SizedBox(width: 4),
+                // Pay / Unpay
+                if (!isPaid)
+                  TextButton.icon(
+                    onPressed: () => _payBill(context),
+                    icon: Icon(isPaid ? Icons.cancel_outlined : Icons.check_circle_outline, size: 16),
+                    label: Text(isPaid ? "Mark Unpaid" : "Mark Paid"),
+                    style: TextButton.styleFrom(foregroundColor: isPaid ? Colors.orange : Colors.green),
+                  ),
+                // Delete
+                TextButton.icon(
+                  onPressed: () => _deleteBill(context),
+                  icon: const Icon(Icons.delete_outline, size: 16),
+                  label: const Text("Delete"),
+                  style: TextButton.styleFrom(foregroundColor: Colors.red),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  String _fmtNum(int n) => n.toString().replaceAllMapped(
+    RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+
+  Widget _chip(IconData icon, String label) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: Colors.grey.shade600),
+        const SizedBox(width: 3),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+      ],
+    );
+  }
+
+  String _fmt(dynamic v) {
+    if (v == null) return '0';
+    if (v is String) return (double.tryParse(v) ?? 0).toStringAsFixed(0);
+    return (v as num).toStringAsFixed(0);
+  }
+
+  String _units(dynamic prev, dynamic curr) {
+    if (prev == null || curr == null) return '0';
+    final p = prev is String ? double.tryParse(prev) ?? 0 : (prev as num).toDouble();
+    final c = curr is String ? double.tryParse(curr) ?? 0 : (curr as num).toDouble();
+    return (c - p).toStringAsFixed(0);
+  }
+
+  Future<void> _downloadReceipt(BuildContext context, String billId, String lang) async {
+    try {
+      final token = context.read<AppState>().token;
+      final bytes = await ApiService.getReceiptPdf(token, billId, lang: lang);
+      final blob = html.Blob([bytes], 'application/pdf');
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      html.AnchorElement(href: url)
+        ..setAttribute('download', 'receipt_${bill['month']}_$lang.pdf')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Failed to download receipt: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _payBill(BuildContext context) async {
+    final token = context.read<AppState>().token;
+    final isPaid = bill['status'] == 'paid';
+    try {
+      if (isPaid) {
+        await ApiService.markBillUnpaid(token, bill['id']);
+      } else {
+        await ApiService.payBill(token, bill['id']);
+      }
+      onRefresh();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _deleteBill(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Delete Bill"),
+        content: Text("Delete bill for ${bill['month']}? This cannot be undone."),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
+    if (confirm != true) return;
+    final token = context.read<AppState>().token;
+    try {
+      await ApiService.deleteBill(token, bill['id']);
+      onRefresh();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+      );
+    }
+  }
+}
+
+// ── Create Bill Dialog ────────────────────────────────────────────────────────
+
+class _CreateBillDialog extends StatefulWidget {
+  final dynamic room;
+  final VoidCallback onCreated;
+
+  const _CreateBillDialog({required this.room, required this.onCreated});
+
+  @override
+  State<_CreateBillDialog> createState() => _CreateBillDialogState();
+}
+
+class _CreateBillDialogState extends State<_CreateBillDialog> {
+  final _monthCtrl = TextEditingController();
+  final _elecPrevCtrl = TextEditingController();
+  final _elecCurrCtrl = TextEditingController();
+  final _elecRateCtrl = TextEditingController(text: '250');
+  final _waterPrevCtrl = TextEditingController();
+  final _waterCurrCtrl = TextEditingController();
+  final _waterRateCtrl = TextEditingController(text: '15');
+
+  // Extra charges list: [{labelCtrl, amountCtrl, remarkCtrl}]
+  final List<Map<String, TextEditingController>> _extras = [];
+
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default month to current YYYY-MM
+    final now = DateTime.now();
+    _monthCtrl.text = "${now.year}-${now.month.toString().padLeft(2, '0')}";
+  }
+
+  void _addExtra() {
+    setState(() {
+      _extras.add({
+        'label': TextEditingController(),
+        'amount': TextEditingController(),
+        'remark': TextEditingController(),
+      });
+    });
+  }
+
+  void _removeExtra(int i) {
+    setState(() => _extras.removeAt(i));
+  }
+
+  Future<void> _submit() async {
+    setState(() { _saving = true; _error = null; });
+
+    final elecPrev = double.tryParse(_elecPrevCtrl.text) ?? 0;
+    final elecCurr = double.tryParse(_elecCurrCtrl.text) ?? 0;
+    final elecRate = double.tryParse(_elecRateCtrl.text) ?? 250;
+    final waterPrev = double.tryParse(_waterPrevCtrl.text) ?? 0;
+    final waterCurr = double.tryParse(_waterCurrCtrl.text) ?? 0;
+    final waterRate = double.tryParse(_waterRateCtrl.text) ?? 15;
+
+    final extraCharges = _extras.map((e) => {
+      'label': e['label']!.text,
+      'amount': double.tryParse(e['amount']!.text) ?? 0,
+      'remark': e['remark']!.text,
+    }).where((e) => (e['label'] as String).isNotEmpty).toList();
+
+    try {
+      final token = context.read<AppState>().token;
+      final tenants = await ApiService.getTenants(token);
+      final tenant = tenants.firstWhere(
+        (t) => t['room_id'] == widget.room['id'] && t['is_active'] == true,
+        orElse: () => null,
+      );
+
+      if (tenant == null) {
+        setState(() { _error = "No active tenant in this room"; _saving = false; });
+        return;
+      }
+
+      try {
+        await ApiService.createBill(
+          token,
+          tenantId: tenant['id'],
+          month: _monthCtrl.text.trim(),
+          elecPrev: elecPrev, elecCurr: elecCurr, elecRate: elecRate,
+          waterPrev: waterPrev, waterCurr: waterCurr, waterRate: waterRate,
+          extraCharges: extraCharges.cast<Map<String, dynamic>>(),
+        );
+        if (!mounted) return;
+        Navigator.pop(context);
+        widget.onCreated();
+      } catch (e) {
+        final msg = e.toString();
+        if (msg.contains('already exists') || msg.contains('duplicate') || msg.contains('unique')) {
+          final confirm = await showDialog<bool>(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text("Bill Already Exists"),
+              content: Text("A bill for ${_monthCtrl.text.trim()} already exists. Override it?"),
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text("Override"),
+                ),
+              ],
+            ),
+          );
+          if (confirm != true) { setState(() => _saving = false); return; }
+          try {
+            final bills = await ApiService.getBillsByRoom(token, widget.room['id']);
+            final existing = bills.firstWhere(
+              (b) => b['month'] == _monthCtrl.text.trim(),
+              orElse: () => null,
+            );
+            if (existing != null) await ApiService.deleteBill(token, existing['id']);
+            await ApiService.createBill(
+              token,
+              tenantId: tenant['id'],
+              month: _monthCtrl.text.trim(),
+              elecPrev: elecPrev, elecCurr: elecCurr, elecRate: elecRate,
+              waterPrev: waterPrev, waterCurr: waterCurr, waterRate: waterRate,
+              extraCharges: extraCharges.cast<Map<String, dynamic>>(),
+            );
+            if (!mounted) return;
+            Navigator.pop(context);
+            widget.onCreated();
+          } catch (e2) {
+            setState(() { _error = e2.toString().replaceFirst("Exception: ", ""); _saving = false; });
+          }
+        } else {
+          setState(() { _error = msg.replaceFirst("Exception: ", ""); _saving = false; });
+        }
+      }
+    } catch (e) {
+      setState(() { _error = e.toString().replaceFirst("Exception: ", ""); _saving = false; });
+    }
+  }
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Container(
+        width: 560,
+        constraints: const BoxConstraints(maxHeight: 640),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("New Bill — Room ${widget.room['room_number']}",
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Month
+                    _field("Month (YYYY-MM)", _monthCtrl),
+                    const SizedBox(height: 12),
+
+                    // Electricity
+                    const Text("Electricity", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Expanded(child: _field("Prev Reading", _elecPrevCtrl, numeric: true)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _field("Curr Reading", _elecCurrCtrl, numeric: true)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _field("Rate (ks/unit)", _elecRateCtrl, numeric: true)),
+                    ]),
+                    const SizedBox(height: 12),
+
+                    // Water
+                    const Text("Water", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                    const SizedBox(height: 6),
+                    Row(children: [
+                      Expanded(child: _field("Prev Reading", _waterPrevCtrl, numeric: true)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _field("Curr Reading", _waterCurrCtrl, numeric: true)),
+                      const SizedBox(width: 8),
+                      Expanded(child: _field("Rate (ks/unit)", _waterRateCtrl, numeric: true)),
+                    ]),
+                    const SizedBox(height: 16),
+
+                    // Extra charges
+                    Row(
+                      children: [
+                        const Text("Extra Charges", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: _addExtra,
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text("Add"),
+                        ),
+                      ],
+                    ),
+                    ..._extras.asMap().entries.map((entry) {
+                      final i = entry.key;
+                      final e = entry.value;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          children: [
+                            Expanded(flex: 3, child: _field("Description (e.g. Light bulb)", e['label']!)),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 2, child: _field("Amount (ks)", e['amount']!, numeric: true)),
+                            const SizedBox(width: 8),
+                            Expanded(flex: 2, child: _field("Remark", e['remark']!)),
+                            IconButton(
+                              onPressed: () => _removeExtra(i),
+                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+
+                    if (_error != null) ...[
+                      const SizedBox(height: 8),
+                      Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _saving ? null : _submit,
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                  child: _saving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Text("Create Bill"),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _field(String label, TextEditingController ctrl, {bool numeric = false}) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: numeric ? TextInputType.number : TextInputType.text,
+      decoration: InputDecoration(
+        labelText: label,
+        isDense: true,
+        border: const OutlineInputBorder(),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      ),
+    );
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
