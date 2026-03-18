@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  static const String baseUrl = "http://localhost:3000";
+  static const String baseUrl = "https://tbhjutc3ux.ap-southeast-2.awsapprunner.com/";
 
   static Future<Map<String, dynamic>> login(
       String email, String password) async {

@@ -1716,7 +1716,7 @@ class _FormsPageState extends State<FormsPage> {
       final today = _formatDate(DateTime.now());
 
       final uri = Uri.parse(
-        'http://localhost:3000/print/overnight-form'
+        'https://tbhjutc3ux.ap-southeast-2.awsapprunner.com/print/overnight-form'
         '?rooms=$roomIds&from_date=$from&to_date=$to&form_date=$today&lang=$_lang'
       );
       final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
