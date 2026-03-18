@@ -145,7 +145,6 @@ class _AdminLayoutState extends State<AdminLayout> {
               NavigationRailDestination(icon: Icon(Icons.dashboard), label: Text('Dashboard')),
               NavigationRailDestination(icon: Icon(Icons.apartment), label: Text('Buildings')),
               NavigationRailDestination(icon: Icon(Icons.meeting_room), label: Text('Rooms')),
-              NavigationRailDestination(icon: Icon(Icons.people), label: Text('Tenants')),
               NavigationRailDestination(icon: Icon(Icons.receipt), label: Text('Billing')),
               NavigationRailDestination(icon: Icon(Icons.assignment), label: Text('Forms')),
               NavigationRailDestination(icon: Icon(Icons.badge), label: Text('Residents')),
@@ -160,7 +159,6 @@ class _AdminLayoutState extends State<AdminLayout> {
                 DashboardPage(),
                 BuildingsPage(),
                 RoomsPage(),
-                TenantsPage(),
                 BillingPage(),   // ← swapped
                 FormsPage(),
                 ResidentsPage(),
@@ -1313,10 +1311,8 @@ class _TenantsPageState extends State<TenantsPage> {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     String? selectedRoomId;
-    final vacantRooms = state.rooms
-        .where((r) => r['is_occupied'] == false || r['is_occupied'] == null)
-        .toList();
-
+    final allRooms = state.rooms;
+        
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
@@ -1330,7 +1326,7 @@ class _TenantsPageState extends State<TenantsPage> {
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Assign Room'),
               value: selectedRoomId,
-              items: vacantRooms.map<DropdownMenuItem<String>>((r) => DropdownMenuItem(
+              items: allRooms.map<DropdownMenuItem<String>>((r) => DropdownMenuItem(
                   value: r['id'] as String,
                   child: Text('Room ${r['room_number']} - ฿${r['monthly_rent']}'))).toList(),
               onChanged: (val) => setS(() => selectedRoomId = val),
@@ -2613,9 +2609,7 @@ class _ResidentsPageState extends State<ResidentsPage> {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     String? selectedRoomId;
-    final vacantRooms = state.rooms
-        .where((r) => r['is_occupied'] == false || r['is_occupied'] == null)
-        .toList();
+    final allRooms = state.rooms;
 
     showDialog(
       context: context,
@@ -2630,7 +2624,7 @@ class _ResidentsPageState extends State<ResidentsPage> {
             DropdownButtonFormField<String>(
               decoration: const InputDecoration(labelText: 'Assign Room'),
               value: selectedRoomId,
-              items: vacantRooms.map<DropdownMenuItem<String>>((r) => DropdownMenuItem(
+              items: allRooms.map<DropdownMenuItem<String>>((r) => DropdownMenuItem(
                   value: r['id'] as String,
                   child: Text('Room ${r['room_number']} - ${r['monthly_rent']} ks'))).toList(),
               onChanged: (val) => setS(() => selectedRoomId = val),
@@ -2643,6 +2637,22 @@ class _ResidentsPageState extends State<ResidentsPage> {
                   backgroundColor: const Color(0xFF2D4A3E), foregroundColor: Colors.white),
               onPressed: () async {
                 if (selectedRoomId == null) return;
+
+                final occupantCount = state.tenants
+                    .where((t) => t['room_id'] == selectedRoomId && t['is_active'] == true)
+                    .length;
+
+                if (occupantCount >= 7) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Room is full — maximum 7 residents per room.'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+
                 await ApiService.createTenant(state.token, nameCtrl.text, phoneCtrl.text, selectedRoomId!);
                 await ApiService.updateRoom(state.token, selectedRoomId!, {'is_occupied': true});
                 if (!ctx.mounted) return;
