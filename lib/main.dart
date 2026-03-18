@@ -140,6 +140,7 @@ class _AdminLayoutState extends State<AdminLayout> {
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) => setState(() => selectedIndex = index),
             labelType: NavigationRailLabelType.all,
+            minWidth: 60,
             destinations: const [
               NavigationRailDestination(icon: Icon(Icons.dashboard), label: Text('Dashboard')),
               NavigationRailDestination(icon: Icon(Icons.apartment), label: Text('Buildings')),
@@ -189,6 +190,8 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 650;
 
     if (state.loadingDashboard && state.dashboard == null) {
       return const Center(child: CircularProgressIndicator());
@@ -215,8 +218,26 @@ class _DashboardPageState extends State<DashboardPage> {
             .map((m) => double.parse((m['revenue'] ?? m['amount'] ?? '0').toString()))
             .reduce((a, b) => a > b ? a : b);
 
+    if (isMobile) {
+      return _buildMobile(context, data, monthly, unpaidBills,
+          collectionRate, paidBills, totalBills, maxRevenue);
+    }
+    return _buildDesktop(context, data, monthly, unpaidBills,
+        collectionRate, paidBills, totalBills, maxRevenue);
+  }
+
+  Widget _buildDesktop(
+    BuildContext context,
+    Map<String, dynamic> data,
+    List<dynamic> monthly,
+    List<dynamic> unpaidBills,
+    double collectionRate,
+    int paidBills,
+    int totalBills,
+    double maxRevenue,
+  ) {
     return Container(
-      color: const Color(0xFFF5F5F0),
+      color: const Color(0xFFF8F9FA),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Row(
@@ -227,150 +248,75 @@ class _DashboardPageState extends State<DashboardPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('Dashboard', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                    IconButton(
-                      icon: const Icon(Icons.refresh),
-                      onPressed: () => context.read<AppState>().refreshDashboard(),
-                      tooltip: 'Refresh',
-                    ),
-                  ]),
-                  const SizedBox(height: 20),
-                  Row(children: [
-                    _statCard('Collected', '฿${data['total_collected']}', Icons.check_circle_outline, const Color(0xFF2D4A3E)),
-                    const SizedBox(width: 12),
-                    _statCard('Unpaid', '฿${data['total_unpaid']}', Icons.warning_amber_outlined, const Color(0xFF8B2635)),
-                    const SizedBox(width: 12),
-                    _statCard('Tenants', '${data['total_tenants']}', Icons.people_outline, const Color(0xFF1A3A5C)),
-                    const SizedBox(width: 12),
-                    _statCard('Occupancy', '${data['occupied_rooms']}/${data['total_rooms']}', Icons.bed_outlined, const Color(0xFF5C4A1A)),
-                  ]),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                        const Text('Collection Rate', style: TextStyle(fontWeight: FontWeight.bold)),
-                        Text('${collectionRate.toStringAsFixed(1)}%  •  $paidBills/$totalBills bills paid',
-                            style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                      ]),
-                      const SizedBox(height: 10),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(6),
-                        child: LinearProgressIndicator(
-                          value: collectionRate / 100,
-                          minHeight: 12,
-                          backgroundColor: Colors.grey[200],
-                          color: const Color(0xFF2D4A3E),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Dashboard',
+                          style: TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A1A1A))),
+                      GestureDetector(
+                        onTap: () => context.read<AppState>().refreshDashboard(),
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Icon(Icons.refresh,
+                              size: 18, color: Colors.grey.shade600),
                         ),
                       ),
-                    ]),
+                    ],
                   ),
                   const SizedBox(height: 20),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('Monthly Revenue', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    Container(
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                      child: Row(children: [
-                        _filterBtn('Paid', _filter == 'paid', () => setState(() => _filter = 'paid')),
-                        _filterBtn('All', _filter == 'all', () => setState(() => _filter = 'all')),
-                        _filterBtn('Unpaid', _filter == 'unpaid', () => setState(() => _filter = 'unpaid')),
-                      ]),
-                    ),
+                  Row(children: [
+                    _statCard('Collected', data['total_collected'].toString(),
+                        Icons.check_circle_outline, const Color(0xFF2D4A3E)),
+                    const SizedBox(width: 12),
+                    _statCard('Unpaid', data['total_unpaid'].toString(),
+                        Icons.warning_amber_outlined, const Color(0xFFC62828)),
+                    const SizedBox(width: 12),
+                    _statCard('Tenants', data['total_tenants'].toString(),
+                        Icons.people_outline, const Color(0xFF1565C0)),
+                    const SizedBox(width: 12),
+                    _statCard(
+                        'Occupancy',
+                        '${data['occupied_rooms']}/${data['total_rooms']}',
+                        Icons.bed_outlined,
+                        const Color(0xFF6A1B9A)),
                   ]),
-                  const SizedBox(height: 12),
-                  Expanded(
-                    child: monthly.isEmpty
-                        ? const Center(child: Text('No data'))
-                        : ListView.builder(
-                            itemCount: monthly.length,
-                            itemBuilder: (context, index) {
-                              final m = monthly[index];
-                              final revenue = double.parse((m['revenue'] ?? m['amount'] ?? '0').toString());
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 10),
-                                child: Row(children: [
-                                  SizedBox(
-                                    width: 80,
-                                    child: Text(m['month'] ?? m['tenant_name'] ?? '',
-                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                                  ),
-                                  Expanded(
-                                    child: Stack(children: [
-                                      Container(height: 26, decoration: BoxDecoration(
-                                          color: Colors.grey[200], borderRadius: BorderRadius.circular(6))),
-                                      FractionallySizedBox(
-                                        widthFactor: revenue / maxRevenue,
-                                        child: Container(height: 26, decoration: BoxDecoration(
-                                            color: const Color(0xFF2D4A3E), borderRadius: BorderRadius.circular(6))),
-                                      ),
-                                    ]),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  SizedBox(
-                                    width: 80,
-                                    child: Text('฿${revenue.toStringAsFixed(0)}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
-                                        textAlign: TextAlign.right),
-                                  ),
-                                ]),
-                              );
-                            },
-                          ),
+                  const SizedBox(height: 16),
+                  _collectionRateCard(collectionRate, paidBills, totalBills),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Monthly Revenue',
+                          style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF1A1A1A))),
+                      _filterRow(),
+                    ],
                   ),
+                  const SizedBox(height: 12),
+                  Expanded(child: _revenueList(monthly, maxRevenue)),
                 ],
               ),
             ),
-            const SizedBox(width: 24),
+            const SizedBox(width: 20),
             SizedBox(
-              width: 280,
+              width: 260,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 56),
-                  Row(children: [
-                    const Text('Outstanding Bills', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(color: const Color(0xFF8B2635), borderRadius: BorderRadius.circular(10)),
-                      child: Text('${unpaidBills.length}', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                    ),
-                  ]),
+                  const SizedBox(height: 52),
+                  _outstandingHeader(unpaidBills.length),
                   const SizedBox(height: 12),
-                  Expanded(
-                    child: unpaidBills.isEmpty
-                        ? Container(
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                            child: const Center(child: Text('All bills paid! 🎉', style: TextStyle(color: Colors.green))),
-                          )
-                        : ListView.builder(
-                            itemCount: unpaidBills.length,
-                            itemBuilder: (context, index) {
-                              final bill = unpaidBills[index];
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: const Border(left: BorderSide(color: Color(0xFF8B2635), width: 3)),
-                                ),
-                                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                    Text(bill['tenant_name'],
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                    Text(bill['month'], style: const TextStyle(color: Colors.grey, fontSize: 11)),
-                                  ]),
-                                  Text('฿${bill['amount']}',
-                                      style: const TextStyle(color: Color(0xFF8B2635), fontWeight: FontWeight.bold)),
-                                ]),
-                              );
-                            },
-                          ),
-                  ),
+                  Expanded(child: _outstandingList(unpaidBills)),
                 ],
               ),
             ),
@@ -380,22 +326,171 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Widget _buildMobile(
+    BuildContext context,
+    Map<String, dynamic> data,
+    List<dynamic> monthly,
+    List<dynamic> unpaidBills,
+    double collectionRate,
+    int paidBills,
+    int totalBills,
+    double maxRevenue,
+  ) {
+    return Container(
+      color: const Color(0xFFF8F9FA),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Dashboard',
+                    style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A1A))),
+                GestureDetector(
+                  onTap: () => context.read<AppState>().refreshDashboard(),
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Icon(Icons.refresh,
+                        size: 16, color: Colors.grey.shade600),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // 2x2 stat grid on mobile
+            Row(children: [
+              _statCard('Collected', data['total_collected'].toString(),
+                  Icons.check_circle_outline, const Color(0xFF2D4A3E)),
+              const SizedBox(width: 10),
+              _statCard('Unpaid', data['total_unpaid'].toString(),
+                  Icons.warning_amber_outlined, const Color(0xFFC62828)),
+            ]),
+            const SizedBox(height: 10),
+            Row(children: [
+              _statCard('Tenants', data['total_tenants'].toString(),
+                  Icons.people_outline, const Color(0xFF1565C0)),
+              const SizedBox(width: 10),
+              _statCard(
+                  'Occupancy',
+                  '${data['occupied_rooms']}/${data['total_rooms']}',
+                  Icons.bed_outlined,
+                  const Color(0xFF6A1B9A)),
+            ]),
+            const SizedBox(height: 16),
+            _collectionRateCard(collectionRate, paidBills, totalBills),
+            const SizedBox(height: 16),
+            _outstandingHeader(unpaidBills.length),
+            const SizedBox(height: 10),
+            _outstandingList(unpaidBills, shrinkWrap: true),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Monthly Revenue',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A1A1A))),
+                _filterRow(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _revenueList(monthly, maxRevenue, shrinkWrap: true),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _statCard(String label, String value, IconData icon, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: color.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))],
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade100),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: Colors.white70, size: 20),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 16),
+          ),
           const SizedBox(height: 10),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A1A))),
+          Text(label,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
         ]),
       ),
+    );
+  }
+
+  Widget _collectionRateCard(double rate, int paid, int total) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade100),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          const Text('Collection Rate',
+              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          Text('${rate.toStringAsFixed(1)}%  •  $paid/$total bills paid',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+        ]),
+        const SizedBox(height: 10),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: rate / 100,
+            minHeight: 8,
+            backgroundColor: Colors.grey.shade100,
+            color: const Color(0xFF2D4A3E),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _filterRow() {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(children: [
+        _filterBtn('Paid', _filter == 'paid', () => setState(() => _filter = 'paid')),
+        _filterBtn('All', _filter == 'all', () => setState(() => _filter = 'all')),
+        _filterBtn('Unpaid', _filter == 'unpaid', () => setState(() => _filter = 'unpaid')),
+      ]),
     );
   }
 
@@ -403,19 +498,185 @@ class _DashboardPageState extends State<DashboardPage> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: active ? const Color(0xFF2D4A3E) : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Text(label, style: TextStyle(
-            color: active ? Colors.white : Colors.grey,
-            fontSize: 12, fontWeight: FontWeight.w600)),
+        child: Text(label,
+            style: TextStyle(
+                color: active ? Colors.white : Colors.grey.shade500,
+                fontSize: 11,
+                fontWeight: FontWeight.w600)),
       ),
     );
   }
-}
 
+  Widget _outstandingHeader(int count) {
+    return Row(children: [
+      const Text('Outstanding Bills',
+          style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1A1A1A))),
+      const SizedBox(width: 8),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: count > 0 ? const Color(0xFFFFEBEE) : const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text('$count',
+            style: TextStyle(
+              color: count > 0 ? const Color(0xFFC62828) : const Color(0xFF2E7D32),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            )),
+      ),
+    ]);
+  }
+
+  Widget _outstandingList(List<dynamic> unpaidBills, {bool shrinkWrap = false}) {
+    if (unpaidBills.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: const Center(
+          child: Text('All bills paid! 🎉',
+              style: TextStyle(color: Color(0xFF2E7D32), fontSize: 13)),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: shrinkWrap,
+      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+      itemCount: unpaidBills.length,
+      itemBuilder: (context, index) {
+        final bill = unpaidBills[index];
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(children: [
+                Container(
+                  width: 4,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFC62828),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(bill['tenant_name'],
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                          color: Color(0xFF1A1A1A))),
+                  Text(bill['month'],
+                      style: TextStyle(
+                          color: Colors.grey.shade500, fontSize: 11)),
+                ]),
+              ]),
+              Text('${bill['amount']} ks',
+                  style: const TextStyle(
+                      color: Color(0xFFC62828),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12)),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _revenueList(List<dynamic> monthly, double maxRevenue,
+      {bool shrinkWrap = false}) {
+    if (monthly.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade100),
+        ),
+        child: Center(
+          child: Text('No data yet',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+        ),
+      );
+    }
+    return ListView.builder(
+      shrinkWrap: shrinkWrap,
+      physics: shrinkWrap ? const NeverScrollableScrollPhysics() : null,
+      itemCount: monthly.length,
+      itemBuilder: (context, index) {
+        final m = monthly[index];
+        final revenue = double.parse(
+            (m['revenue'] ?? m['amount'] ?? '0').toString());
+        final ratio = maxRevenue > 0 ? revenue / maxRevenue : 0.0;
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.grey.shade100),
+          ),
+          child: Row(children: [
+            SizedBox(
+              width: 64,
+              child: Text(
+                m['month'] ?? m['tenant_name'] ?? '',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600),
+              ),
+            ),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: ratio,
+                  minHeight: 6,
+                  backgroundColor: Colors.grey.shade100,
+                  color: const Color(0xFF2D4A3E).withOpacity(0.5),
+                ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Text(
+              '${revenue.toStringAsFixed(0)} ks',
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A1A)),
+            ),
+          ]),
+        );
+      },
+    );
+  }
+}
 // ─────────────────────────────────────────────────────────────────────────────
 // BUILDINGS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -429,11 +690,20 @@ class BuildingsPage extends StatelessWidget {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Add Building'),
-        content: TextField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Building Name')),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(labelText: 'Building Name'),
+          autofocus: true,
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2D4A3E),
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
+              if (nameCtrl.text.trim().isEmpty) return;
               await ApiService.createBuilding(context.read<AppState>().token, nameCtrl.text.trim());
               if (!context.mounted) return;
               Navigator.pop(context);
@@ -459,17 +729,26 @@ class BuildingsPage extends StatelessWidget {
           _detailRow('Occupied', '$occupied'),
           _detailRow('Vacant', '${rooms.length - occupied}'),
           if (rooms.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text('Rooms', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
             const SizedBox(height: 8),
-            const Text('Rooms:', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
             Wrap(
               spacing: 6,
+              runSpacing: 6,
               children: rooms.map((r) {
                 final occ = r['is_occupied'] == true;
-                return Chip(
-                  label: Text(r['room_number']),
-                  backgroundColor: occ ? Colors.red[100] : Colors.green[100],
-                  labelStyle: TextStyle(color: occ ? Colors.red[800] : Colors.green[800], fontSize: 12),
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: occ ? const Color(0xFFFFEBEE) : const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(r['room_number'],
+                      style: TextStyle(
+                        color: occ ? const Color(0xFFC62828) : const Color(0xFF2E7D32),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      )),
                 );
               }).toList(),
             ),
@@ -481,7 +760,7 @@ class BuildingsPage extends StatelessWidget {
               if (rooms.isNotEmpty) {
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('Cannot delete building with rooms. Remove rooms first.'),
+                    content: Text('Remove all rooms first before deleting this building.'),
                     backgroundColor: Colors.red));
                 return;
               }
@@ -499,17 +778,11 @@ class BuildingsPage extends StatelessWidget {
   }
 
   Widget _detailRow(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
+    padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(children: [
-      Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-      Text(value),
+      Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black54, fontSize: 13)),
+      Text(value, style: const TextStyle(fontSize: 13)),
     ]),
-  );
-
-  Widget _statChip(String label, Color color) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
-    child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 11)),
   );
 
   @override
@@ -517,37 +790,66 @@ class BuildingsPage extends StatelessWidget {
     final state = context.watch<AppState>();
     final buildings = state.buildings;
     final allRooms = state.rooms;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
 
     if (state.loadingBuildings && buildings.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
+      backgroundColor: const Color(0xFFF8F9FA),
       floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'fab_buildings', 
+        heroTag: 'fab_buildings',
         onPressed: () => _showAddBuilding(context),
         backgroundColor: const Color(0xFF2D4A3E),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Add Building', style: TextStyle(color: Colors.white)),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header
             Row(children: [
-              const Text('Buildings', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 16),
+              Text('Buildings',
+                  style: TextStyle(
+                    fontSize: isMobile ? 22 : 26,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1A1A1A),
+                  )),
+              const SizedBox(width: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFF2D4A3E), borderRadius: BorderRadius.circular(20)),
-                child: Text('${buildings.length} total', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F0EE),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text('${buildings.length}',
+                    style: const TextStyle(
+                      color: Color(0xFF2D4A3E),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    )),
               ),
             ]),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
+
             if (buildings.isEmpty)
-              const Center(child: Text('No buildings yet'))
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.apartment_outlined, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 12),
+                      Text('No buildings yet',
+                          style: TextStyle(color: Colors.grey.shade500, fontSize: 15)),
+                    ],
+                  ),
+                ),
+              )
             else
               Expanded(
                 child: ListView.builder(
@@ -561,48 +863,85 @@ class BuildingsPage extends StatelessWidget {
                     return GestureDetector(
                       onTap: () => _showBuildingDetail(context, building, allRooms),
                       child: Container(
-                        margin: const EdgeInsets.only(bottom: 16),
+                        margin: const EdgeInsets.only(bottom: 12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2D4A3E),
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [BoxShadow(
-                              color: const Color(0xFF2D4A3E).withOpacity(0.25),
-                              blurRadius: 8, offset: const Offset(0, 4))],
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFEEEEEE)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
-                        padding: const EdgeInsets.all(20),
+                        padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Row(children: [
-                                const Icon(Icons.apartment, color: Colors.white, size: 22),
-                                const SizedBox(width: 10),
-                                Text(building['name'],
-                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
-                              ]),
-                              Row(children: [
-                                _statChip('$occupied occupied', const Color(0xFF8B2635)),
-                                const SizedBox(width: 6),
-                                _statChip('$vacant vacant', Colors.green.shade700),
-                              ]),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFE8F0EE),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.apartment,
+                                        color: Color(0xFF2D4A3E), size: 18),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Text(building['name'],
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF1A1A1A),
+                                      )),
+                                ]),
+                                const Icon(Icons.chevron_right,
+                                    color: Colors.grey, size: 20),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(children: [
+                              _infoChip(Icons.meeting_room_outlined,
+                                  '${rooms.length} rooms', const Color(0xFF6B7280)),
+                              const SizedBox(width: 8),
+                              _infoChip(Icons.person_outline,
+                                  '$occupied occupied', const Color(0xFFC62828),
+                                  bg: const Color(0xFFFFEBEE)),
+                              const SizedBox(width: 8),
+                              _infoChip(Icons.check_circle_outline,
+                                  '$vacant vacant', const Color(0xFF2E7D32),
+                                  bg: const Color(0xFFE8F5E9)),
                             ]),
                             if (rooms.isNotEmpty) ...[
-                              const SizedBox(height: 14),
+                              const SizedBox(height: 10),
                               Wrap(
                                 spacing: 6,
                                 runSpacing: 6,
                                 children: rooms.map((r) {
                                   final occ = r['is_occupied'] == true;
                                   return Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
                                     decoration: BoxDecoration(
                                       color: occ
-                                          ? const Color(0xFF8B2635).withOpacity(0.8)
-                                          : Colors.white.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(8),
+                                          ? const Color(0xFFFFEBEE)
+                                          : const Color(0xFFF3F4F6),
+                                      borderRadius: BorderRadius.circular(5),
                                     ),
                                     child: Text(r['room_number'],
-                                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: occ
+                                              ? const Color(0xFFC62828)
+                                              : const Color(0xFF6B7280),
+                                        )),
                                   );
                                 }).toList(),
                               ),
@@ -617,6 +956,21 @@ class BuildingsPage extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _infoChip(IconData icon, String label, Color color, {Color? bg}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: bg ?? const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
+      ]),
     );
   }
 }
@@ -656,6 +1010,10 @@ class RoomsPage extends StatelessWidget {
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D4A3E),
+                foregroundColor: Colors.white,
+              ),
               onPressed: () async {
                 final state = context.read<AppState>();
                 await ApiService.createRoom(state.token, selectedBuildingId!, roomNumCtrl.text,
@@ -674,7 +1032,6 @@ class RoomsPage extends StatelessWidget {
 
   void _showRoomDetail(BuildContext context, Map<String, dynamic> room, List<dynamic> tenants) {
     final occupied = room['is_occupied'] == true;
-    // Look up tenant from cached data — no extra API call!
     final tenant = tenants.firstWhere(
       (t) => t['room_id'] == room['id'] && t['is_active'] == true,
       orElse: () => null,
@@ -687,7 +1044,7 @@ class RoomsPage extends StatelessWidget {
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           _detailRow('Building', room['building_name'] ?? '-'),
           _detailRow('Floor', '${room['floor'] ?? '-'}'),
-          _detailRow('Monthly Rent', '฿${room['monthly_rent']}'),
+          _detailRow('Monthly Rent', '${room['monthly_rent']} ks'),
           _detailRow('Status', occupied ? 'Occupied' : 'Vacant'),
           _detailRow('Tenant', tenant != null ? tenant['name'] : 'No tenant'),
         ]),
@@ -702,6 +1059,10 @@ class RoomsPage extends StatelessWidget {
             child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2D4A3E),
+              foregroundColor: Colors.white,
+            ),
             onPressed: () async {
               final state = context.read<AppState>();
               Navigator.pop(context);
@@ -716,10 +1077,10 @@ class RoomsPage extends StatelessWidget {
   }
 
   Widget _detailRow(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
+    padding: const EdgeInsets.symmetric(vertical: 3),
     child: Row(children: [
-      Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-      Text(value),
+      Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.black54, fontSize: 13)),
+      Text(value, style: const TextStyle(fontSize: 13)),
     ]),
   );
 
@@ -728,14 +1089,27 @@ class RoomsPage extends StatelessWidget {
     final state = context.watch<AppState>();
     final rooms = state.rooms;
     final buildings = state.buildings;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 600;
+
+    // Responsive grid columns
+    int crossAxisCount;
+    if (screenWidth < 400) {
+      crossAxisCount = 2;
+    } else if (screenWidth < 700) {
+      crossAxisCount = 3;
+    } else if (screenWidth < 1000) {
+      crossAxisCount = 4;
+    } else {
+      crossAxisCount = 5;
+    }
 
     if (state.loadingRooms && rooms.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (rooms.isEmpty) return const Center(child: Text('No rooms yet'));
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F0),
+      backgroundColor: const Color(0xFFF8F9FA),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'fab_rooms',
         onPressed: () => _showAddRoom(context, buildings),
@@ -744,90 +1118,168 @@ class RoomsPage extends StatelessWidget {
         label: const Text('Add Room', style: TextStyle(color: Colors.white)),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Header
             Row(children: [
-              const Text('Rooms', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 16),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFF2D4A3E), borderRadius: BorderRadius.circular(20)),
-                child: Text('${rooms.length} total', style: const TextStyle(color: Colors.white, fontSize: 12)),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(color: Colors.green[700], borderRadius: BorderRadius.circular(20)),
-                child: Text('${rooms.where((r) => r['is_occupied'] != true).length} vacant',
-                    style: const TextStyle(color: Colors.white, fontSize: 12)),
+              Text('Rooms',
+                  style: TextStyle(
+                    fontSize: isMobile ? 22 : 26,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF1A1A1A),
+                  )),
+              const SizedBox(width: 10),
+              _headerChip('${rooms.length} total', const Color(0xFF2D4A3E)),
+              const SizedBox(width: 6),
+              _headerChip(
+                '${rooms.where((r) => r['is_occupied'] != true).length} vacant',
+                const Color(0xFF2E7D32),
               ),
             ]),
-            const SizedBox(height: 24),
-            Expanded(
-              child: GridView.builder(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 4,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 0.7,
+            const SizedBox(height: 20),
+
+            if (rooms.isEmpty)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.meeting_room_outlined, size: 48, color: Colors.grey.shade400),
+                      const SizedBox(height: 12),
+                      Text('No rooms yet', style: TextStyle(color: Colors.grey.shade500, fontSize: 15)),
+                    ],
+                  ),
                 ),
-                itemCount: rooms.length,
-                itemBuilder: (context, index) {
-                  final room = rooms[index];
-                  final occupied = room['is_occupied'] == true;
-                  return GestureDetector(
-                    onTap: () => _showRoomDetail(context, room, state.tenants),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      decoration: BoxDecoration(
-                        color: occupied ? const Color(0xFF8B2635) : const Color(0xFF2D4A3E),
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [BoxShadow(
-                            color: (occupied ? const Color(0xFF8B2635) : const Color(0xFF2D4A3E)).withOpacity(0.3),
-                            blurRadius: 8, offset: const Offset(0, 4))],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
+              )
+            else
+              Expanded(
+                child: GridView.builder(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: screenWidth < 600 ? 0.85 : screenWidth < 900 ? 1.3 : 1.7,
+                ),
+                  itemCount: rooms.length,
+                  itemBuilder: (context, index) {
+                    final room = rooms[index];
+                    final occupied = room['is_occupied'] == true;
+                    return GestureDetector(
+                      onTap: () => _showRoomDetail(context, room, state.tenants),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: occupied
+                                ? const Color(0xFFFFCDD2)
+                                : const Color(0xFFEEEEEE),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(14),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          mainAxisAlignment: MainAxisAlignment.start,
                           children: [
-                            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                              Text(room['room_number'],
-                                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
-                              Icon(occupied ? Icons.person : Icons.bed_outlined, color: Colors.white70, size: 20),
-                            ]),
-                            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(room['building_name'] ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                              const SizedBox(height: 4),
-                              Text('฿${room['monthly_rent']}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  room['room_number'],
+                                  style: TextStyle(
+                                    fontSize: isMobile ? 16 : 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: const Color(0xFF1A1A1A),
+                                  ),
                                 ),
-                                child: Text(occupied ? 'Occupied' : 'Vacant',
-                                    style: const TextStyle(color: Colors.white, fontSize: 11)),
-                              ),
-                            ]),
+                                Icon(
+                                  occupied ? Icons.person : Icons.bed_outlined,
+                                  size: 16,
+                                  color: occupied
+                                      ? const Color(0xFFC62828)
+                                      : Colors.grey.shade400,
+                                ),
+                              ],
+                            ),
+                            // After the room number Row, add:
+                            const SizedBox(height: 6),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  room['building_name'] ?? '',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade500,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Text(
+                                  'Floor ${room['floor'] ?? '-'}',
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '-'} ks',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Color(0xFF1A1A1A),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: occupied
+                                        ? const Color(0xFFFFEBEE)
+                                        : const Color(0xFFE8F5E9),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    occupied ? 'Occupied' : 'Vacant',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: occupied
+                                          ? const Color(0xFFC62828)
+                                          : const Color(0xFF2E7D32),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ],
                         ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
-            ),
           ],
         ),
       ),
     );
   }
+
+  Widget _headerChip(String label, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+    decoration: BoxDecoration(
+      color: color.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(label,
+        style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1612,6 +2064,10 @@ class _MeterInputPageState extends State<MeterInputPage> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Forms
+// ─────────────────────────────────────────────────────────────────────────────
+
 class FormsPage extends StatefulWidget {
   const FormsPage({super.key});
 
@@ -1621,13 +2077,10 @@ class FormsPage extends StatefulWidget {
 
 class _FormsPageState extends State<FormsPage> {
   Set<String> selectedRoomIds = {};
-  DateTime fromDate = DateTime.now();
-  DateTime toDate = DateTime.now().add(const Duration(days: 90));
   bool generating = false;
   String message = '';
   String _lang = 'my';
 
-  // Settings
   bool showSettings = false;
   bool loadingSettings = true;
   bool savingSettings = false;
@@ -1685,22 +2138,6 @@ class _FormsPageState extends State<FormsPage> {
     }
   }
 
-  String _formatDate(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
-  Future<void> _pickDate(bool isFrom) async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: isFrom ? fromDate : toDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
-    );
-    if (picked != null) setState(() {
-      if (isFrom) fromDate = picked;
-      else toDate = picked;
-    });
-  }
-
   Future<void> _generate() async {
     if (selectedRoomIds.isEmpty) {
       setState(() => message = 'Please select at least one room.');
@@ -1711,13 +2148,9 @@ class _FormsPageState extends State<FormsPage> {
       final state = context.read<AppState>();
       final token = state.token;
       final roomIds = selectedRoomIds.join(',');
-      final from = _formatDate(fromDate);
-      final to = _formatDate(toDate);
-      final today = _formatDate(DateTime.now());
-
       final uri = Uri.parse(
         'https://tbhjutc3ux.ap-southeast-2.awsapprunner.com/print/overnight-form'
-        '?rooms=$roomIds&from_date=$from&to_date=$to&form_date=$today&lang=$_lang'
+        '?rooms=$roomIds&lang=$_lang'
       );
       final response = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
       if (response.statusCode == 200) {
@@ -1741,308 +2174,421 @@ class _FormsPageState extends State<FormsPage> {
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
     final occupiedRooms = state.rooms.where((r) => r['is_occupied'] == true).toList();
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 650;
 
     return Container(
-      color: const Color(0xFFF5F5F0),
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // LEFT — room selector
-            SizedBox(
-              width: 280,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Forms', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  const Text('Overnight Stay Registration',
-                      style: TextStyle(color: Colors.grey, fontSize: 13)),
-                  const SizedBox(height: 20),
-                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                    const Text('Select Rooms',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          if (selectedRoomIds.length == occupiedRooms.length) {
-                            selectedRoomIds.clear();
-                          } else {
-                            selectedRoomIds = occupiedRooms.map((r) => r['id'] as String).toSet();
-                          }
-                        });
-                      },
-                      child: Text(
-                        selectedRoomIds.length == occupiedRooms.length ? 'Deselect All' : 'Select All',
-                        style: const TextStyle(color: Color(0xFF2D4A3E)),
-                      ),
-                    ),
-                  ]),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: occupiedRooms.isEmpty
-                        ? const Center(child: Text('No occupied rooms'))
-                        : ListView.builder(
-                            itemCount: occupiedRooms.length,
-                            itemBuilder: (context, index) {
-                              final room = occupiedRooms[index];
-                              final id = room['id'] as String;
-                              final selected = selectedRoomIds.contains(id);
-                              final tenant = state.tenants.firstWhere(
-                                (t) => t['room_id'] == id && t['is_active'] == true,
-                                orElse: () => null,
-                              );
-                              return GestureDetector(
-                                onTap: () => setState(() {
-                                  if (selected) selectedRoomIds.remove(id);
-                                  else selectedRoomIds.add(id);
-                                }),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 150),
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: BoxDecoration(
-                                    color: selected ? const Color(0xFF2D4A3E) : Colors.white,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: selected ? const Color(0xFF2D4A3E) : Colors.grey.shade200,
-                                    ),
-                                  ),
-                                  child: Row(children: [
-                                    Icon(
-                                      selected ? Icons.check_box : Icons.check_box_outline_blank,
-                                      color: selected ? Colors.white : Colors.grey,
-                                      size: 20,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                      Text('Room ${room['room_number']}',
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: selected ? Colors.white : Colors.black,
-                                          )),
-                                      if (tenant != null)
-                                        Text(tenant['name'],
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: selected ? Colors.white70 : Colors.grey,
-                                            )),
-                                    ]),
-                                  ]),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
+      color: const Color(0xFFF8F9FA),
+      child: isMobile
+          ? _buildMobileLayout(occupiedRooms)
+          : _buildDesktopLayout(occupiedRooms),
+    );
+  }
+
+  Widget _buildDesktopLayout(List<dynamic> occupiedRooms) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 260,
+            child: _buildRoomSelector(occupiedRooms, isMobile: false),
+          ),
+          const SizedBox(width: 24),
+          Expanded(
+            child: SingleChildScrollView(
+              child: _buildGeneratePanel(isMobile: false),
             ),
+          ),
+        ],
+      ),
+    );
+  }
 
-            const SizedBox(width: 24),
+  Widget _buildMobileLayout(List<dynamic> occupiedRooms) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Forms',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+          const SizedBox(height: 4),
+          Text('Overnight Stay Registration',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+          const SizedBox(height: 20),
+          _buildRoomSelector(occupiedRooms, isMobile: true),
+          const SizedBox(height: 20),
+          _buildGeneratePanel(isMobile: true),
+        ],
+      ),
+    );
+  }
 
-            // RIGHT
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 48),
-
-                    // Main options card
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Form Language', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            ChoiceChip(
-                              label: const Text('မြန်မာ'),
-                              selected: _lang == 'my',
-                              onSelected: (_) => setState(() => _lang = 'my'),
-                              selectedColor: const Color(0xFF2D4A3E),
-                              labelStyle: TextStyle(color: _lang == 'my' ? Colors.white : Colors.black),
-                            ),
-                            const SizedBox(width: 8),
-                            ChoiceChip(
-                              label: const Text('English'),
-                              selected: _lang == 'en',
-                              onSelected: (_) => setState(() => _lang = 'en'),
-                              selectedColor: const Color(0xFF2D4A3E),
-                              labelStyle: TextStyle(color: _lang == 'en' ? Colors.white : Colors.black),
-                            ),
-                          ]),
-                          const SizedBox(height: 16),
-                          const Divider(),
-                          const SizedBox(height: 12),
-                          Row(children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2D4A3E).withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                '${selectedRoomIds.length} room${selectedRoomIds.length == 1 ? '' : 's'} selected',
-                                style: const TextStyle(color: Color(0xFF2D4A3E), fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                          ]),
-                          const SizedBox(height: 16),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF2D4A3E),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 16),
-                              ),
-                              onPressed: generating ? null : _generate,
-                              icon: generating
-                                  ? const SizedBox(width: 16, height: 16,
-                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                  : const Icon(Icons.download),
-                              label: Text(
-                                generating ? 'Generating...' : 'Generate & Download PDF',
-                                style: const TextStyle(fontSize: 15),
-                              ),
-                            ),
-                          ),
-                          if (message.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            Text(message,
-                                style: TextStyle(
-                                    color: message.startsWith('✅') ? Colors.green : Colors.red)),
-                          ],
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Form Settings collapsible
-                    GestureDetector(
-                      onTap: () => setState(() => showSettings = !showSettings),
-                      child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2D4A3E),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                          const Text('⚙️ Form Settings',
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                          Row(children: [
-                            Text(
-                              loadingSettings ? '' : '${hostNameCtrl.text}  •  Ward ${wardNumberCtrl.text}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                            const SizedBox(width: 8),
-                            Icon(showSettings ? Icons.expand_less : Icons.expand_more, color: Colors.white),
-                          ]),
-                        ]),
-                      ),
-                    ),
-
-                    if (showSettings) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                        child: loadingSettings
-                            ? const Center(child: CircularProgressIndicator())
-                            : Column(children: [
-                                Row(children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: hostNameCtrl,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Host Name',
-                                        border: OutlineInputBorder(),
-                                        filled: true, fillColor: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: DropdownButtonFormField<String>(
-                                      value: hostGender,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Gender',
-                                        border: OutlineInputBorder(),
-                                        filled: true, fillColor: Colors.white,
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(value: 'male', child: Text('Male (ဦး)')),
-                                        DropdownMenuItem(value: 'female', child: Text('Female (ဒေါ်)')),
-                                      ],
-                                      onChanged: (v) => setState(() => hostGender = v),
-                                    ),
-                                  ),
-                                ]),
-                                const SizedBox(height: 12),
-                                Row(children: [
-                                  Expanded(
-                                    child: TextField(
-                                      controller: wardNumberCtrl,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Ward Number',
-                                        border: OutlineInputBorder(),
-                                        filled: true, fillColor: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: TextField(
-                                      controller: streetNameCtrl,
-                                      decoration: const InputDecoration(
-                                        labelText: 'Street Name',
-                                        border: OutlineInputBorder(),
-                                        filled: true, fillColor: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ]),
-                                const SizedBox(height: 12),
-                                Row(children: [
-                                  ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: const Color(0xFF2D4A3E),
-                                      foregroundColor: Colors.white,
-                                    ),
-                                    onPressed: savingSettings ? null : _saveSettings,
-                                    child: savingSettings
-                                        ? const SizedBox(width: 14, height: 14,
-                                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                        : const Text('Save'),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  if (settingsMessage.isNotEmpty)
-                                    Text(settingsMessage,
-                                        style: TextStyle(
-                                            color: settingsMessage.startsWith('✅') ? Colors.green : Colors.red)),
-                                ]),
-                              ]),
-                      ),
-                    ],
-                  ],
-                ),
+  Widget _buildRoomSelector(List<dynamic> occupiedRooms, {required bool isMobile}) {
+    final state = context.watch<AppState>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
+      children: [
+        if (!isMobile) ...[
+          const Text('Forms',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF1A1A1A))),
+          const SizedBox(height: 4),
+          Text('Overnight Stay Registration',
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+          const SizedBox(height: 20),
+        ],
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Select Rooms',
+                style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: Colors.grey.shade700)),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (selectedRoomIds.length == occupiedRooms.length) {
+                    selectedRoomIds.clear();
+                  } else {
+                    selectedRoomIds = occupiedRooms.map((r) => r['id'] as String).toSet();
+                  }
+                });
+              },
+              child: Text(
+                selectedRoomIds.length == occupiedRooms.length ? 'Deselect All' : 'Select All',
+                style: const TextStyle(
+                    color: Color(0xFF2D4A3E),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        if (occupiedRooms.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Center(
+              child: Text('No occupied rooms',
+                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+            ),
+          )
+        else
+          ...occupiedRooms.map((room) {
+            final id = room['id'] as String;
+            final selected = selectedRoomIds.contains(id);
+            final tenant = state.tenants.firstWhere(
+              (t) => t['room_id'] == id && t['is_active'] == true,
+              orElse: () => null,
+            );
+            return GestureDetector(
+              onTap: () => setState(() {
+                if (selected) selectedRoomIds.remove(id);
+                else selectedRoomIds.add(id);
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: selected ? const Color(0xFFE8F0EE) : Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: selected ? const Color(0xFF2D4A3E) : Colors.grey.shade200,
+                  ),
+                ),
+                child: Row(children: [
+                  Icon(
+                    selected ? Icons.check_box : Icons.check_box_outline_blank,
+                    color: selected ? const Color(0xFF2D4A3E) : Colors.grey.shade400,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Room ${room['room_number']}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: selected
+                                  ? const Color(0xFF2D4A3E)
+                                  : const Color(0xFF1A1A1A),
+                            )),
+                        if (tenant != null)
+                          Text(tenant['name'],
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: selected
+                                    ? const Color(0xFF2D4A3E).withOpacity(0.7)
+                                    : Colors.grey.shade500,
+                              )),
+                      ],
+                    ),
+                  ),
+                ]),
+              ),
+            );
+          }).toList(),
+      ],
+    );
+  }
+
+  Widget _buildGeneratePanel({required bool isMobile}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade100),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Form Language',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: Colors.grey.shade700)),
+              const SizedBox(height: 10),
+              Row(children: [
+                _langChip('မြန်မာ', 'my'),
+                const SizedBox(width: 8),
+                _langChip('English', 'en'),
+              ]),
+              const SizedBox(height: 16),
+              const Divider(height: 1, color: Color(0xFFF3F4F6)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE8F0EE),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${selectedRoomIds.length} room${selectedRoomIds.length == 1 ? '' : 's'} selected',
+                  style: const TextStyle(
+                      color: Color(0xFF2D4A3E),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12),
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2D4A3E),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: generating ? null : _generate,
+                  icon: generating
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2))
+                      : const Icon(Icons.download, size: 18),
+                  label: Text(
+                    generating ? 'Generating...' : 'Generate & Download PDF',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              if (message.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Text(message,
+                    style: TextStyle(
+                        color: message.startsWith('✅')
+                            ? const Color(0xFF2E7D32)
+                            : Colors.red.shade400,
+                        fontSize: 12)),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Settings collapsible
+        GestureDetector(
+          onTap: () => setState(() => showSettings = !showSettings),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade100),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(children: [
+                  Icon(Icons.settings_outlined,
+                      size: 16, color: Colors.grey.shade600),
+                  const SizedBox(width: 8),
+                  Text('Form Settings',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                          color: Colors.grey.shade700)),
+                ]),
+                Row(children: [
+                  if (!loadingSettings)
+                    Text(
+                      hostNameCtrl.text.isNotEmpty
+                          ? '${hostNameCtrl.text} · Ward ${wardNumberCtrl.text}'
+                          : 'Not configured',
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade400),
+                    ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    showSettings ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                    size: 18,
+                    color: Colors.grey.shade500,
+                  ),
+                ]),
+              ],
+            ),
+          ),
+        ),
+        if (showSettings) ...[
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade100),
+            ),
+            child: loadingSettings
+                ? const Center(child: CircularProgressIndicator())
+                : Column(children: [
+                    Row(children: [
+                      Expanded(
+                        child: TextField(
+                          controller: hostNameCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Host Name',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: hostGender,
+                          decoration: const InputDecoration(
+                            labelText: 'Gender',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'male', child: Text('Male (ဦး)')),
+                            DropdownMenuItem(value: 'female', child: Text('Female (ဒေါ်)')),
+                          ],
+                          onChanged: (v) => setState(() => hostGender = v),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Expanded(
+                        child: TextField(
+                          controller: wardNumberCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Ward Number',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextField(
+                          controller: streetNameCtrl,
+                          decoration: const InputDecoration(
+                            labelText: 'Street Name',
+                            border: OutlineInputBorder(),
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 14),
+                    Row(children: [
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2D4A3E),
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: savingSettings ? null : _saveSettings,
+                        child: savingSettings
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(
+                                    color: Colors.white, strokeWidth: 2))
+                            : const Text('Save'),
+                      ),
+                      const SizedBox(width: 12),
+                      if (settingsMessage.isNotEmpty)
+                        Text(settingsMessage,
+                            style: TextStyle(
+                                color: settingsMessage.startsWith('✅')
+                                    ? const Color(0xFF2E7D32)
+                                    : Colors.red.shade400,
+                                fontSize: 12)),
+                    ]),
+                  ]),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _langChip(String label, String value) {
+    final selected = _lang == value;
+    return GestureDetector(
+      onTap: () => setState(() => _lang = value),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF2D4A3E) : const Color(0xFFF3F4F6),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : Colors.grey.shade600,
+            )),
       ),
     );
   }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// RESIDENTS — Full tenant profile management
-// ─────────────────────────────────────────────────────────────────────────────
 
 class ResidentsPage extends StatefulWidget {
   const ResidentsPage({super.key});
@@ -2056,6 +2602,10 @@ class _ResidentsPageState extends State<ResidentsPage> {
 
   void _selectTenant(Map<String, dynamic> t) {
     setState(() => selectedTenant = t);
+  }
+
+  void _goBack() {
+    setState(() => selectedTenant = null);
   }
 
   void _showAddResident(BuildContext context) {
@@ -2082,14 +2632,15 @@ class _ResidentsPageState extends State<ResidentsPage> {
               value: selectedRoomId,
               items: vacantRooms.map<DropdownMenuItem<String>>((r) => DropdownMenuItem(
                   value: r['id'] as String,
-                  child: Text('Room ${r['room_number']} - ฿${r['monthly_rent']}'))).toList(),
+                  child: Text('Room ${r['room_number']} - ${r['monthly_rent']} ks'))).toList(),
               onChanged: (val) => setS(() => selectedRoomId = val),
             ),
           ]),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2D4A3E), foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2D4A3E), foregroundColor: Colors.white),
               onPressed: () async {
                 if (selectedRoomId == null) return;
                 await ApiService.createTenant(state.token, nameCtrl.text, phoneCtrl.text, selectedRoomId!);
@@ -2133,61 +2684,53 @@ class _ResidentsPageState extends State<ResidentsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 650;
     final state = context.watch<AppState>();
     final tenants = state.tenants;
 
+    if (isMobile) {
+      if (selectedTenant != null) {
+        return _ResidentDetailPanel(
+          key: ValueKey(selectedTenant!['id']),
+          tenant: selectedTenant!,
+          isMobile: true,
+          onBack: _goBack,
+          onDeactivate: () => _confirmDeactivate(context, selectedTenant!),
+          onSaved: (updated) {
+            setState(() => selectedTenant = updated);
+            context.read<AppState>().refreshTenants();
+          },
+        );
+      }
+      return _buildList(context, tenants, isMobile: true);
+    }
+
     return Row(
       children: [
-        // LEFT — tenant list
-        Container(
-          width: 260,
-          color: const Color(0xFFF0F0EB),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  const Text('Residents', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  IconButton(
-                    icon: const Icon(Icons.person_add, color: Color(0xFF2D4A3E)),
-                    onPressed: () => _showAddResident(context),
-                  ),
-                ]),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: tenants.isEmpty
-                    ? const Center(child: Text('No residents yet'))
-                    : ListView.builder(
-                        itemCount: tenants.length,
-                        itemBuilder: (context, index) {
-                          final t = tenants[index];
-                          final isSelected = selectedTenant?['id'] == t['id'];
-                          return ListTile(
-                            selected: isSelected,
-                            selectedTileColor: const Color(0xFF2D4A3E).withOpacity(0.1),
-                            leading: CircleAvatar(
-                              backgroundColor: const Color(0xFF2D4A3E),
-                              child: Text(t['name'][0].toUpperCase(),
-                                  style: const TextStyle(color: Colors.white, fontSize: 14)),
-                            ),
-                            title: Text(t['name'], style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text('Room ${t['room_number'] ?? '-'}'),
-                            onTap: () => _selectTenant(t),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
+        SizedBox(
+          width: 240,
+          child: _buildList(context, tenants, isMobile: false),
         ),
-        const VerticalDivider(width: 1),
+        Container(width: 1, color: Colors.grey.shade200),
         Expanded(
           child: selectedTenant == null
-              ? const Center(child: Text('Select a resident'))
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.person_outline, size: 40, color: Colors.grey.shade300),
+                      const SizedBox(height: 12),
+                      Text('Select a resident',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                    ],
+                  ),
+                )
               : _ResidentDetailPanel(
                   key: ValueKey(selectedTenant!['id']),
                   tenant: selectedTenant!,
+                  isMobile: false,
+                  onBack: null,
                   onDeactivate: () => _confirmDeactivate(context, selectedTenant!),
                   onSaved: (updated) {
                     setState(() => selectedTenant = updated);
@@ -2198,18 +2741,184 @@ class _ResidentsPageState extends State<ResidentsPage> {
       ],
     );
   }
+
+  Widget _buildList(BuildContext context, List<dynamic> tenants, {required bool isMobile}) {
+    return Container(
+      color: const Color(0xFFF8F9FA),
+      child: Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 14, 16, 14, 10),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Residents',
+                    style: TextStyle(
+                      fontSize: isMobile ? 22 : 16,
+                      fontWeight: FontWeight.bold,
+                      color: const Color(0xFF1A1A1A),
+                    )),
+                GestureDetector(
+                  onTap: () => _showAddResident(context),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F0EE),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.person_add,
+                        color: Color(0xFF2D4A3E), size: 18),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Container(height: 1, color: Colors.grey.shade200),
+          Expanded(
+            child: tenants.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.people_outline,
+                            size: 40, color: Colors.grey.shade300),
+                        const SizedBox(height: 12),
+                        Text('No residents yet',
+                            style: TextStyle(
+                                color: Colors.grey.shade400, fontSize: 13)),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    padding: EdgeInsets.all(isMobile ? 16 : 8),
+                    itemCount: tenants.length,
+                    itemBuilder: (context, index) {
+                      final t = tenants[index];
+                      final isSelected = selectedTenant?['id'] == t['id'];
+                      if (isMobile) {
+                        return GestureDetector(
+                          onTap: () => _selectTenant(t),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.grey.shade200),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.03),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: Row(children: [
+                              CircleAvatar(
+                                radius: 20,
+                                backgroundColor: const Color(0xFF2D4A3E),
+                                child: Text(t['name'][0].toUpperCase(),
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(t['name'],
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14)),
+                                    Text('Room ${t['room_number'] ?? '-'}',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.grey.shade500)),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.chevron_right,
+                                  color: Colors.grey.shade400, size: 20),
+                            ]),
+                          ),
+                        );
+                      }
+                      return GestureDetector(
+                        onTap: () => _selectTenant(t),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? const Color(0xFFE8F0EE)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(children: [
+                            CircleAvatar(
+                              radius: 16,
+                              backgroundColor: isSelected
+                                  ? const Color(0xFF2D4A3E)
+                                  : Colors.grey.shade200,
+                              child: Text(t['name'][0].toUpperCase(),
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.grey.shade600,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  )),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(t['name'],
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: isSelected
+                                            ? const Color(0xFF2D4A3E)
+                                            : const Color(0xFF1A1A1A),
+                                      ),
+                                      overflow: TextOverflow.ellipsis),
+                                  Text('Room ${t['room_number'] ?? '-'}',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.grey.shade500)),
+                                ],
+                              ),
+                            ),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ResidentDetailPanel extends StatefulWidget {
   final Map<String, dynamic> tenant;
   final VoidCallback onDeactivate;
   final Function(Map<String, dynamic>) onSaved;
+  final VoidCallback? onBack;
+  final bool isMobile;
 
   const _ResidentDetailPanel({
     super.key,
     required this.tenant,
     required this.onDeactivate,
     required this.onSaved,
+    required this.onBack,
+    required this.isMobile,
   });
 
   @override
@@ -2299,6 +3008,7 @@ class _ResidentDetailPanelState extends State<_ResidentDetailPanel> {
         decoration: InputDecoration(
           labelText: label,
           border: const OutlineInputBorder(),
+          isDense: true,
           filled: true,
           fillColor: Colors.white,
         ),
@@ -2309,130 +3019,137 @@ class _ResidentDetailPanelState extends State<_ResidentDetailPanel> {
   @override
   Widget build(BuildContext context) {
     final t = widget.tenant;
+    final isMobile = widget.isMobile;
+
     return Container(
-      color: const Color(0xFFF5F5F0),
+      color: const Color(0xFFF8F9FA),
       child: Column(
         children: [
-          // Header
           Container(
-            padding: const EdgeInsets.all(20),
+            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 20, 14, isMobile ? 16 : 20, 14),
             color: Colors.white,
             child: Row(children: [
+              if (isMobile) ...[
+                GestureDetector(
+                  onTap: widget.onBack,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.arrow_back_ios_new,
+                        size: 16, color: Color(0xFF1A1A1A)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
               CircleAvatar(
-                radius: 28,
+                radius: 22,
                 backgroundColor: const Color(0xFF2D4A3E),
                 child: Text(t['name'][0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold)),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(t['name'], style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+                  Text(t['name'],
+                      style: const TextStyle(
+                          fontSize: 15, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis),
                   Text('Room ${t['room_number'] ?? '-'}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                      style: TextStyle(
+                          color: Colors.grey.shade500, fontSize: 12)),
                 ]),
               ),
-              TextButton.icon(
-                icon: const Icon(Icons.person_remove, color: Colors.red, size: 18),
-                label: const Text('Remove', style: TextStyle(color: Colors.red)),
-                onPressed: widget.onDeactivate,
+              GestureDetector(
+                onTap: widget.onDeactivate,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.person_remove, color: Colors.red.shade400, size: 14),
+                    const SizedBox(width: 4),
+                    Text('Remove',
+                        style: TextStyle(
+                            color: Colors.red.shade400,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600)),
+                  ]),
+                ),
               ),
             ]),
           ),
-          // Form
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isMobile ? 16 : 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Basic Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  _sectionLabel('Basic Info'),
                   const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(child: _field('Full Name', nameCtrl)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _field('Phone', phoneCtrl)),
-                  ]),
-                  Row(children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: GestureDetector(
-                          onTap: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: selectedDob ?? DateTime(1990),
-                              firstDate: DateTime(1920),
-                              lastDate: DateTime.now(),
-                            );
-                            if (picked != null) setState(() => selectedDob = picked);
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              border: Border.all(color: Colors.grey.shade400),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Row(children: [
-                              const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
-                              const SizedBox(width: 8),
-                              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                const Text('Date of Birth', style: TextStyle(color: Colors.grey, fontSize: 11)),
-                                Text(
-                                  selectedDob != null
-                                      ? '${selectedDob!.year}-${selectedDob!.month.toString().padLeft(2,'0')}-${selectedDob!.day.toString().padLeft(2,'0')}'
-                                      : 'Select date',
-                                  style: const TextStyle(fontWeight: FontWeight.w500),
-                                ),
-                              ]),
-                            ]),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: DropdownButtonFormField<String>(
-                          value: selectedGender,
-                          decoration: const InputDecoration(
-                            labelText: 'Gender',
-                            border: OutlineInputBorder(),
-                            filled: true,
-                            fillColor: Colors.white,
-                          ),
-                          items: const [
-                            DropdownMenuItem(value: 'male', child: Text('Male')),
-                            DropdownMenuItem(value: 'female', child: Text('Female')),
-                          ],
-                          onChanged: (v) => setState(() => selectedGender = v),
-                        ),
-                      ),
-                    ),
-                  ]),
+                  isMobile
+                      ? Column(children: [
+                          _field('Full Name', nameCtrl),
+                          _field('Phone', phoneCtrl),
+                        ])
+                      : Row(children: [
+                          Expanded(child: _field('Full Name', nameCtrl)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _field('Phone', phoneCtrl)),
+                        ]),
+                  isMobile
+                      ? Column(children: [
+                          _dobPicker(),
+                          const SizedBox(height: 12),
+                          _genderPicker(),
+                          const SizedBox(height: 12),
+                        ])
+                      : Row(children: [
+                          Expanded(child: _dobPicker()),
+                          const SizedBox(width: 12),
+                          Expanded(child: _genderPicker()),
+                        ]),
                   const SizedBox(height: 4),
-                  const Text('Identity', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  _sectionLabel('Identity'),
                   const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(child: _field('NRC Number', nrcCtrl)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _field('Ethnicity', ethnicityCtrl)),
-                  ]),
-                  Row(children: [
-                    Expanded(child: _field("Father's Name", fatherCtrl)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _field("Mother's Name", motherCtrl)),
-                  ]),
-                  const SizedBox(height: 4),
-                  const Text('Stay Info', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  isMobile
+                      ? Column(children: [
+                          _field('NRC Number', nrcCtrl),
+                          _field('Ethnicity', ethnicityCtrl),
+                          _field("Father's Name", fatherCtrl),
+                          _field("Mother's Name", motherCtrl),
+                        ])
+                      : Column(children: [
+                          Row(children: [
+                            Expanded(child: _field('NRC Number', nrcCtrl)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _field('Ethnicity', ethnicityCtrl)),
+                          ]),
+                          Row(children: [
+                            Expanded(child: _field("Father's Name", fatherCtrl)),
+                            const SizedBox(width: 12),
+                            Expanded(child: _field("Mother's Name", motherCtrl)),
+                          ]),
+                        ]),
+                  _sectionLabel('Stay Info'),
                   const SizedBox(height: 12),
-                  Row(children: [
-                    Expanded(child: _field('Occupation', occupationCtrl)),
-                    const SizedBox(width: 12),
-                    Expanded(child: _field('Relationship to Host', relationshipCtrl)),
-                  ]),
+                  isMobile
+                      ? Column(children: [
+                          _field('Occupation', occupationCtrl),
+                          _field('Relationship to Host', relationshipCtrl),
+                        ])
+                      : Row(children: [
+                          Expanded(child: _field('Occupation', occupationCtrl)),
+                          const SizedBox(width: 12),
+                          Expanded(child: _field('Relationship to Host', relationshipCtrl)),
+                        ]),
                   _field('Purpose of Visit', visitPurposeCtrl),
                   _field('Previous Address', prevAddressCtrl, maxLines: 2),
                   const SizedBox(height: 8),
@@ -2441,19 +3158,28 @@ class _ResidentDetailPanelState extends State<_ResidentDetailPanel> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF2D4A3E),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 28, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                       onPressed: saving ? null : _save,
                       child: saving
-                          ? const SizedBox(width: 16, height: 16,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                  color: Colors.white, strokeWidth: 2))
                           : const Text('Save Changes'),
                     ),
                     const SizedBox(width: 12),
                     if (message.isNotEmpty)
                       Text(message,
                           style: TextStyle(
-                              color: message.startsWith('✅') ? Colors.green : Colors.red)),
+                              color: message.startsWith('✅')
+                                  ? const Color(0xFF2E7D32)
+                                  : Colors.red.shade400,
+                              fontSize: 12)),
                   ]),
                 ],
               ),
@@ -2463,6 +3189,71 @@ class _ResidentDetailPanelState extends State<_ResidentDetailPanel> {
       ),
     );
   }
+
+  Widget _sectionLabel(String label) => Padding(
+    padding: const EdgeInsets.only(top: 4),
+    child: Text(label,
+        style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 13,
+            color: Color(0xFF1A1A1A))),
+  );
+
+  Widget _dobPicker() => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: GestureDetector(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: selectedDob ?? DateTime(1990),
+          firstDate: DateTime(1920),
+          lastDate: DateTime.now(),
+        );
+        if (picked != null) setState(() => selectedDob = picked);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade400),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Row(children: [
+          Icon(Icons.calendar_today, size: 15, color: Colors.grey.shade500),
+          const SizedBox(width: 8),
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Date of Birth',
+                style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+            Text(
+              selectedDob != null
+                  ? '${selectedDob!.year}-${selectedDob!.month.toString().padLeft(2, '0')}-${selectedDob!.day.toString().padLeft(2, '0')}'
+                  : 'Select date',
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+            ),
+          ]),
+        ]),
+      ),
+    ),
+  );
+
+  Widget _genderPicker() => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: DropdownButtonFormField<String>(
+      value: selectedGender,
+      decoration: const InputDecoration(
+        labelText: 'Gender',
+        border: OutlineInputBorder(),
+        isDense: true,
+        filled: true,
+        fillColor: Colors.white,
+      ),
+      items: const [
+        DropdownMenuItem(value: 'male', child: Text('Male')),
+        DropdownMenuItem(value: 'female', child: Text('Female')),
+      ],
+      onChanged: (v) => setState(() => selectedGender = v),
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2492,7 +3283,6 @@ class _BillingPageState extends State<BillingPage> {
   Future<void> _loadRooms() async {
     final token = context.read<AppState>().token;
     final rooms = await ApiService.getRooms(token);
-    // Only occupied rooms make sense for billing
     setState(() {
       _rooms = rooms.where((r) => r['is_occupied'] == true).toList();
       _loadingRooms = false;
@@ -2517,90 +3307,251 @@ class _BillingPageState extends State<BillingPage> {
     _loadBills(room['id']);
   }
 
+  void _goBack() {
+    setState(() {
+      _selectedRoom = null;
+      _bills = [];
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isMobile = screenWidth < 650;
+
+    // Mobile: show either room list OR bills (not both)
+    if (isMobile) {
+      if (_selectedRoom != null) {
+        return _BillsPanel(
+          room: _selectedRoom,
+          bills: _bills,
+          loading: _loadingBills,
+          onRefresh: () => _loadBills(_selectedRoom['id']),
+          onBack: _goBack,
+          isMobile: true,
+        );
+      }
+      return _buildRoomList(isMobile: true);
+    }
+
+    // Desktop/half: side by side
     return Row(
       children: [
-        // ── Left: Room list ──────────────────────────────────────────────────
-        Container(
-          width: 220,
-          decoration: BoxDecoration(
-            border: Border(right: BorderSide(color: Colors.grey.shade300)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
-                child: Text("Rooms", style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-              ),
-              Expanded(
-                child: _loadingRooms
-                    ? const Center(child: CircularProgressIndicator())
-                    : _rooms.isEmpty
-                        ? const Center(child: Text("No occupied rooms", style: TextStyle(color: Colors.grey)))
-                        : ListView.builder(
-                            itemCount: _rooms.length,
-                            itemBuilder: (context, i) {
-                              final room = _rooms[i];
-                              final selected = _selectedRoom?['id'] == room['id'];
-                              return ListTile(
-                                selected: selected,
-                                selectedTileColor: Colors.blue.shade50,
-                                leading: CircleAvatar(
-                                  backgroundColor: selected ? Colors.blue : Colors.grey.shade200,
-                                  child: Text(
-                                    room['room_number'] ?? '',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: selected ? Colors.white : Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                                title: Text("Room ${room['room_number']}", style: const TextStyle(fontSize: 13)),
-                                subtitle: Text(
-                                  "${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '—'} ks/mo",
-                                  style: const TextStyle(fontSize: 11),
-                                ),
-                                onTap: () => _selectRoom(room),
-                              );
-                            },
-                          ),
-              ),
-            ],
-          ),
+        SizedBox(
+          width: 200,
+          child: _buildRoomList(isMobile: false),
         ),
-
-        // ── Right: Bills panel ───────────────────────────────────────────────
+        Container(width: 1, color: Colors.grey.shade200),
         Expanded(
           child: _selectedRoom == null
-              ? const Center(child: Text("Select a room to view bills", style: TextStyle(color: Colors.grey)))
+              ? Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.receipt_outlined, size: 40, color: Colors.grey.shade300),
+                      const SizedBox(height: 12),
+                      Text('Select a room to view bills',
+                          style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                    ],
+                  ),
+                )
               : _BillsPanel(
                   room: _selectedRoom,
                   bills: _bills,
                   loading: _loadingBills,
                   onRefresh: () => _loadBills(_selectedRoom['id']),
+                  onBack: null,
+                  isMobile: false,
                 ),
         ),
       ],
     );
   }
-}
 
-// ── Bills Panel ───────────────────────────────────────────────────────────────
+  Widget _buildRoomList({required bool isMobile}) {
+    return Container(
+      color: const Color(0xFFF8F9FA),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(isMobile ? 16 : 14, isMobile ? 20 : 16, 16, 10),
+            child: Text('Billing',
+                style: TextStyle(
+                  fontSize: isMobile ? 22 : 15,
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF1A1A1A),
+                )),
+          ),
+          if (!isMobile)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+              child: Text('Occupied Rooms',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            ),
+          Expanded(
+            child: _loadingRooms
+                ? const Center(child: CircularProgressIndicator())
+                : _rooms.isEmpty
+                    ? Center(
+                        child: Text('No occupied rooms',
+                            style: TextStyle(color: Colors.grey.shade400, fontSize: 13)))
+                    : ListView.builder(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: isMobile ? 16 : 8, vertical: 4),
+                        itemCount: _rooms.length,
+                        itemBuilder: (context, i) {
+                          final room = _rooms[i];
+                          final selected = _selectedRoom?['id'] == room['id'];
+                          if (isMobile) {
+                            return GestureDetector(
+                              onTap: () => _selectRoom(room),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.04),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE8F0EE),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: Center(
+                                        child: Text(room['room_number'] ?? '',
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF2D4A3E),
+                                              fontSize: 13,
+                                            )),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Room ${room['room_number']}',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 14)),
+                                          Text(
+                                            '${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '-'} ks/mo',
+                                            style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey.shade500),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Icon(Icons.chevron_right,
+                                        color: Colors.grey.shade400, size: 20),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }
+                          // Desktop sidebar item
+                          return GestureDetector(
+                            onTap: () => _selectRoom(room),
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: selected
+                                    ? const Color(0xFFE8F0EE)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: selected
+                                          ? const Color(0xFF2D4A3E)
+                                          : Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        room['room_number'] ?? '',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: selected
+                                              ? Colors.white
+                                              : Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Room ${room['room_number']}',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: selected
+                                                  ? const Color(0xFF2D4A3E)
+                                                  : const Color(0xFF1A1A1A),
+                                            )),
+                                        Text(
+                                          '${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '-'} ks',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey.shade500),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _BillsPanel extends StatelessWidget {
   final dynamic room;
   final List<dynamic> bills;
   final bool loading;
   final VoidCallback onRefresh;
+  final VoidCallback? onBack;
+  final bool isMobile;
 
   const _BillsPanel({
     required this.room,
     required this.bills,
     required this.loading,
     required this.onRefresh,
+    required this.onBack,
+    required this.isMobile,
   });
 
   @override
@@ -2608,46 +3559,85 @@ class _BillsPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header
         Container(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+          padding: EdgeInsets.fromLTRB(isMobile ? 16 : 20, 16, isMobile ? 16 : 20, 12),
           decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            color: Colors.white,
+            border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
           ),
           child: Row(
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text("Room ${room['room_number']}", style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-                  Text("${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '—'} ks/month rent",
-                      style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-                ],
+              if (isMobile) ...[
+                GestureDetector(
+                  onTap: onBack,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3F4F6),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.arrow_back_ios_new,
+                        size: 16, color: Color(0xFF1A1A1A)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Room ${room['room_number']}',
+                        style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A1A1A))),
+                    Text(
+                      '${double.tryParse(room['monthly_rent'].toString())?.toStringAsFixed(0) ?? '-'} ks/month',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
               ),
-              const Spacer(),
               ElevatedButton.icon(
                 onPressed: () => _showCreateBillDialog(context),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text("New Bill"),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(isMobile ? 'New' : 'New Bill'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2D4A3E),
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16, vertical: 10),
+                  textStyle: const TextStyle(fontSize: 13),
+                ),
               ),
             ],
           ),
         ),
-
-        // Bills list
         Expanded(
           child: loading
               ? const Center(child: CircularProgressIndicator())
               : bills.isEmpty
-                  ? const Center(child: Text("No bills yet for this room", style: TextStyle(color: Colors.grey)))
+                  ? Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.receipt_long_outlined,
+                              size: 40, color: Colors.grey.shade300),
+                          const SizedBox(height: 12),
+                          Text('No bills yet',
+                              style: TextStyle(
+                                  color: Colors.grey.shade400, fontSize: 14)),
+                        ],
+                      ),
+                    )
                   : ListView.separated(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(isMobile ? 14 : 16),
                       itemCount: bills.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, i) => _BillCard(
                         bill: bills[i],
                         onRefresh: onRefresh,
+                        isMobile: isMobile,
                       ),
                     ),
         ),
@@ -2664,13 +3654,12 @@ class _BillsPanel extends StatelessWidget {
   }
 }
 
-// ── Bill Card ─────────────────────────────────────────────────────────────────
-
 class _BillCard extends StatelessWidget {
   final dynamic bill;
   final VoidCallback onRefresh;
+  final bool isMobile;
 
-  const _BillCard({required this.bill, required this.onRefresh});
+  const _BillCard({required this.bill, required this.onRefresh, required this.isMobile});
 
   @override
   Widget build(BuildContext context) {
@@ -2680,105 +3669,163 @@ class _BillCard extends StatelessWidget {
         ? bill['extra_charges'] as List
         : jsonDecode(bill['extra_charges'] ?? '[]') as List;
 
-    return Card(
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade100),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(bill['month'] ?? '',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Color(0xFF1A1A1A))),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isPaid
+                      ? const Color(0xFFE8F5E9)
+                      : const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  isPaid ? 'Paid' : 'Unpaid',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isPaid
+                        ? const Color(0xFF2E7D32)
+                        : const Color(0xFFE65100),
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Text('${_fmtNum(int.parse(amount))} ks',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: Color(0xFF1A1A1A))),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _chip(Icons.home_outlined, 'Rent: ${_fmt(bill['rent'])} ks'),
+              _chip(Icons.flash_on_outlined,
+                  'Elec: ${_fmt(bill['electricity'])} ks (${_units(bill['elec_prev'], bill['elec_curr'])} u)'),
+              _chip(Icons.water_drop_outlined,
+                  'Water: ${_fmt(bill['water'])} ks (${_units(bill['water_prev'], bill['water_curr'])} u)'),
+              if (extras.isNotEmpty)
+                ...extras.map((e) =>
+                    _chip(Icons.add_circle_outline, '${e['label']}: ${_fmt(e['amount'])} ks')),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const Divider(height: 1, color: Color(0xFFF3F4F6)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: [
+              _actionBtn(
+                context,
+                icon: Icons.download,
+                label: 'မြန်မာ PDF',
+                color: const Color(0xFF00897B),
+                onTap: () => _downloadReceipt(context, bill['id'], 'my'),
+              ),
+              _actionBtn(
+                context,
+                icon: Icons.download,
+                label: 'Eng PDF',
+                color: const Color(0xFF00ACC1),
+                onTap: () => _downloadReceipt(context, bill['id'], 'en'),
+              ),
+              if (!isPaid)
+                _actionBtn(
+                  context,
+                  icon: Icons.check_circle_outline,
+                  label: 'Mark Paid',
+                  color: const Color(0xFF2E7D32),
+                  onTap: () => _payBill(context),
+                ),
+              if (isPaid)
+                _actionBtn(
+                  context,
+                  icon: Icons.cancel_outlined,
+                  label: 'Mark Unpaid',
+                  color: const Color(0xFFE65100),
+                  onTap: () => _payBill(context),
+                ),
+              _actionBtn(
+                context,
+                icon: Icons.delete_outline,
+                label: 'Delete',
+                color: Colors.red.shade400,
+                onTap: () => _deleteBill(context),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionBtn(BuildContext context,
+      {required IconData icon,
+      required String label,
+      required Color color,
+      required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Top row
-            Row(
-              children: [
-                Text(bill['month'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: isPaid ? Colors.green.shade50 : Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isPaid ? Colors.green.shade200 : Colors.orange.shade200),
-                  ),
-                  child: Text(
-                    isPaid ? "Paid" : "Unpaid",
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: isPaid ? Colors.green.shade700 : Colors.orange.shade700,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                Text("${_fmtNum(int.parse(amount))} ks",
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // Breakdown
-            Wrap(
-              spacing: 16,
-              runSpacing: 4,
-              children: [
-                _chip(Icons.home_outlined, "Rent: ${_fmt(bill['rent'])} ks"),
-                _chip(Icons.flash_on_outlined, "Elec: ${_fmt(bill['electricity'])} ks (${_units(bill['elec_prev'], bill['elec_curr'])} u)"),
-                _chip(Icons.water_drop_outlined, "Water: ${_fmt(bill['water'])} ks (${_units(bill['water_prev'], bill['water_curr'])} u)"),
-                if (extras.isNotEmpty)
-                  ...extras.map((e) => _chip(Icons.add_circle_outline, "${e['label']}: ${_fmt(e['amount'])} ks")),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // Actions
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                // Receipt MY
-                TextButton.icon(
-                  onPressed: () => _downloadReceipt(context, bill['id'], 'my'),
-                  icon: const Icon(Icons.download, size: 16),
-                  label: const Text("မြန်မာ PDF"),
-                  style: TextButton.styleFrom(foregroundColor: Colors.teal),
-                ),
-                // Receipt EN
-                TextButton.icon(
-                  onPressed: () => _downloadReceipt(context, bill['id'], 'en'),
-                  icon: const Icon(Icons.download, size: 16),
-                  label: const Text("Eng PDF"),
-                  style: TextButton.styleFrom(foregroundColor: Colors.teal.shade300),
-                ),
-                const SizedBox(width: 4),
-                // Pay / Unpay
-                if (!isPaid)
-                  TextButton.icon(
-                    onPressed: () => _payBill(context),
-                    icon: Icon(isPaid ? Icons.cancel_outlined : Icons.check_circle_outline, size: 16),
-                    label: Text(isPaid ? "Mark Unpaid" : "Mark Paid"),
-                    style: TextButton.styleFrom(foregroundColor: isPaid ? Colors.orange : Colors.green),
-                  ),
-                // Delete
-                TextButton.icon(
-                  onPressed: () => _deleteBill(context),
-                  icon: const Icon(Icons.delete_outline, size: 16),
-                  label: const Text("Delete"),
-                  style: TextButton.styleFrom(foregroundColor: Colors.red),
-                ),
-              ],
-            ),
+            Icon(icon, size: 13, color: color),
+            const SizedBox(width: 4),
+            Text(label,
+                style: TextStyle(
+                    fontSize: 11, color: color, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
     );
   }
-  String _fmtNum(int n) => n.toString().replaceAllMapped(
-    RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
+
+  String _fmtNum(int n) => n
+      .toString()
+      .replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},');
 
   Widget _chip(IconData icon, String label) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: Colors.grey.shade600),
+        Icon(icon, size: 12, color: Colors.grey.shade500),
         const SizedBox(width: 3),
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+        Text(label,
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
       ],
     );
   }
@@ -2808,7 +3855,9 @@ class _BillCard extends StatelessWidget {
       html.Url.revokeObjectUrl(url);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to download receipt: $e"), backgroundColor: Colors.red),
+        SnackBar(
+            content: Text('Failed to download: $e'),
+            backgroundColor: Colors.red),
       );
     }
   }
@@ -2825,7 +3874,7 @@ class _BillCard extends StatelessWidget {
       onRefresh();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -2834,11 +3883,16 @@ class _BillCard extends StatelessWidget {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text("Delete Bill"),
-        content: Text("Delete bill for ${bill['month']}? This cannot be undone."),
+        title: const Text('Delete Bill'),
+        content: Text('Delete bill for ${bill['month']}? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Cancel")),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("Delete", style: TextStyle(color: Colors.red))),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Delete',
+                  style: TextStyle(color: Colors.red))),
         ],
       ),
     );
@@ -2849,14 +3903,11 @@ class _BillCard extends StatelessWidget {
       onRefresh();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e"), backgroundColor: Colors.red),
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
       );
     }
   }
 }
-
-// ── Create Bill Dialog ────────────────────────────────────────────────────────
-
 class _CreateBillDialog extends StatefulWidget {
   final dynamic room;
   final VoidCallback onCreated;
@@ -2876,7 +3927,6 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
   final _waterCurrCtrl = TextEditingController();
   final _waterRateCtrl = TextEditingController(text: '15');
 
-  // Extra charges list: [{labelCtrl, amountCtrl, remarkCtrl}]
   final List<Map<String, TextEditingController>> _extras = [];
 
   bool _saving = false;
@@ -2885,7 +3935,6 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
   @override
   void initState() {
     super.initState();
-    // Default month to current YYYY-MM
     final now = DateTime.now();
     _monthCtrl.text = "${now.year}-${now.month.toString().padLeft(2, '0')}";
   }
@@ -2993,6 +4042,7 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
       setState(() { _error = e.toString().replaceFirst("Exception: ", ""); _saving = false; });
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Dialog(
@@ -3013,11 +4063,8 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Month
                     _field("Month (YYYY-MM)", _monthCtrl),
                     const SizedBox(height: 12),
-
-                    // Electricity
                     const Text("Electricity", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     const SizedBox(height: 6),
                     Row(children: [
@@ -3028,8 +4075,6 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
                       Expanded(child: _field("Rate (ks/unit)", _elecRateCtrl, numeric: true)),
                     ]),
                     const SizedBox(height: 12),
-
-                    // Water
                     const Text("Water", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                     const SizedBox(height: 6),
                     Row(children: [
@@ -3040,8 +4085,6 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
                       Expanded(child: _field("Rate (ks/unit)", _waterRateCtrl, numeric: true)),
                     ]),
                     const SizedBox(height: 16),
-
-                    // Extra charges
                     Row(
                       children: [
                         const Text("Extra Charges", style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
@@ -3060,7 +4103,7 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: Row(
                           children: [
-                            Expanded(flex: 3, child: _field("Description (e.g. Light bulb)", e['label']!)),
+                            Expanded(flex: 3, child: _field("Description", e['label']!)),
                             const SizedBox(width: 8),
                             Expanded(flex: 2, child: _field("Amount (ks)", e['amount']!, numeric: true)),
                             const SizedBox(width: 8),
@@ -3073,7 +4116,6 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
                         ),
                       );
                     }),
-
                     if (_error != null) ...[
                       const SizedBox(height: 8),
                       Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
@@ -3090,7 +4132,10 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: _saving ? null : _submit,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2D4A3E),
+                    foregroundColor: Colors.white,
+                  ),
                   child: _saving
                       ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : const Text("Create Bill"),
@@ -3116,8 +4161,6 @@ class _CreateBillDialogState extends State<_CreateBillDialog> {
     );
   }
 }
-
-
 
 
 
